@@ -1,0 +1,21 @@
+.{
+    .name = .demo,
+    .version = "0.0.0",
+    .fingerprint = 0xd642dfa038f3726c, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.15.2",
+    .dependencies = .{
+        .raylib_zig = .{
+            .url = "git+https://github.com/raylib-zig/raylib-zig?ref=devel#cd71c85d571027ac8033357f83b124ee051825b3",
+            .hash = "raylib_zig-5.6.0-dev-KE8REENOBQC-m5nK7M2b5aKSIubJPbPLUYcRhT7aT3RN",
+        },
+        .zig_nn = .{
+            .url = "git+https://github.com/krypticlogan/zffnn#e0496466b6cae0a89a17f4323f52ad22cfaa55ba",
+            .hash = "zig_nn-0.0.0-HTjYtQqTBwDa2Sx284xQYXQX-CIoba6_WOvL1CtHE3Kv",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}
