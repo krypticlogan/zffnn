@@ -1,8 +1,8 @@
 # Zig FFNN
 
 ## User-defined NN Example for pretrained weights
-```
-const definition: []const struct { usize, Activation} = &.{ 
+```ruby
+const definition: []const struct { usize, Activation } = &.{ 
     .{feature_ct, .none}, 
     .{10, .relu}, 
     .{15, .sigmoid}, 
