@@ -330,6 +330,7 @@ fn Layer(kind: layer_kind, activation: Activation, comptime len: usize, comptime
 /// - The length of the tuple denotes the depth (number of layers) of the network
 /// - Each entry of the tuple denotes how many neurons per layer
 pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_size: usize) type {
+    @setEvalBranchQuota(2_000_000_000);
     const depth = def.len;
     comptime var layers: [depth]type = undefined;
     // Create nodes and weights
@@ -369,6 +370,7 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
 
         /// Build a new predefined NN with the definition provided
         pub fn new() This {
+            @setEvalBranchQuota(2_000_000_000);
             const self: This = comptime blk: {
                 var tmp: This = undefined;
                 tmp.num_nodes = 0;
@@ -411,6 +413,7 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
                 // inline for (b, 0..) |val, j| {
                 //     b_f16[j] = @floatCast(val);
                 // }
+                
                 self.layer_from_bin(i, w, b);
                 // @compileLog(bin.len);
                 // @compileLog(bin[0]);

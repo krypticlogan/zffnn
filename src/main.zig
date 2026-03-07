@@ -6,8 +6,6 @@ const Activation = ffnn.Activation;
 const print = std.debug.print;
 
 pub fn main() void {
-    @setEvalBranchQuota(2_000_000_000);
-
     const csi = "\x1b";
     const img = @embedFile("preprocessed_imgs/3/img.bin");
     const pixels = std.mem.bytesAsSlice(f32, img);
@@ -51,13 +49,5 @@ pub fn main() void {
             break;
     } else unreachable;
 
-    // var guess: u8 = undefined;
-    // var certainty: f32 = 0.0;
-    // for (0..10) |num| {
-    //     if (preds.data[num][0] > certainty) {
-    //         certainty = preds.data[num][0];
-    //         guess = @intCast(num);
-    //     }
-    // }
-    print("Guess: {d}", .{guess});
+    print("Guess: {d}\n", .{guess});
 }
