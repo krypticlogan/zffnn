@@ -4,6 +4,7 @@ const NN = ffnn.NN;
 const Mat = ffnn.Mat;
 const MatOp = ffnn.MatOp;
 const print = std.debug.print;
+
 pub fn main() !void {
     var gpa: std.heap.DebugAllocator(.{}) = .init;
     defer {
@@ -13,9 +14,7 @@ pub fn main() !void {
 
             }
         }
-    const allocator = gpa.allocator();
-
-    @setEvalBranchQuota(5000);
+    @setEvalBranchQuota(2_000_000_000);
     // var mat = Mat(.{3, 2}).create(0);
     // // mat.init(0);
     // const mat_template: [3][2]f64 = .{ 
@@ -55,11 +54,12 @@ pub fn main() !void {
     // e_mul.show();
     // var mat_t = mat.t();
     // mat_t.show();
-    const entry_ct = 2;
-    const feature_ct = 3;
+    const entry_ct = 3;
+    const feature_ct = 784;
     const data: [entry_ct][feature_ct]f64 = .{ 
-        .{1, 2, 3},
-        .{4, 5, 6},
+        .{0} ** feature_ct,
+        .{0} ** feature_ct,
+        .{0} ** feature_ct
     };
 
     const input_type = Mat(.{entry_ct, feature_ct});
@@ -69,12 +69,16 @@ pub fn main() !void {
     // input.show();
     const def: []const struct { usize, MatOp} = &.{ 
         .{feature_ct, .relu}, 
-        .{10, .relu}, 
-        .{15, .sigmoid}, 
-        .{2, .softmax}
+        .{128, .relu}, 
+        .{64, .relu}, 
+        .{10, .softmax}
     };
     const Net = NN(def, entry_ct, data);
-    var nn = Net.new(allocator);
+    var nn = comptime Net.load_from_csv("data/params");
+
+    nn.layers[0].z.show();
+    nn.layers[0].a.show();
+    // _ = &nn;
 
     // const sig_test: [1][2]f64 = .{
     //     .{ -4.76887372491392, -11.067189709820568 },
@@ -90,16 +94,24 @@ pub fn main() !void {
 
 
 
-    nn.forward();
+    // nn.forward();
 
-    nn.layers[0].z.show();
-    nn.layers[0].a.show();
+    // inline for (0..def.len) |i| {
+    //     print("\nLayer {d}\n", .{i + 1});
+    //     print("Z |\t", .{});
+    //     nn.layers[i].z.show();
+    //     print("\nA |\t", .{});
+    //     nn.layers[i].a.show();
+    // }
 
-    nn.layers[3].z.show();
-    nn.layers[3].a.show();
+    // nn.layers[0].z.show();
+    // nn.layers[0].a.show();
+
+    // nn.layers[3].z.show();
+    // nn.layers[3].a.show();
 
 
 
     // nn.view();
-    nn.destroy();
+    // nn.destroy();
 }

@@ -1,16 +1,8 @@
 //! By convention, root.zig is the root source file when making a library.
 const std = @import("std");
-// const opengl = @import("zopengl");
-// const glfw = @import("zglfw");
-// const zgui = @import("zgui");
 const print = std.debug.print;
 
-var rng_gen: usize = 0;
-fn randomNormalizedFloat(rand: std.Random) f64 {
-    const rand_float = rand.float(f64);
-    rng_gen += 1;
-    return 2 * rand_float - 1;
-}
+
 
 fn mix_max_normalize(mat: Mat) void {
     _ = mat;
@@ -30,10 +22,11 @@ fn isMatrix(comptime maybe_mat_type: anytype) bool {
     return std.mem.eql(u8, fields[0].name, "data");
 }
 
-var test_mat = Mat(.{2, 4}).create(0);
-var test_mat_ptr = &test_mat;
+
 
 test "test_isMatrix" {
+    var test_mat = Mat(.{2, 4}).create(0);
+    const test_mat_ptr = &test_mat;
     try std.testing.expect(isMatrix(@TypeOf(test_mat)) == true);
     try std.testing.expect(isMatrix(@TypeOf(test_mat_ptr.*)) == true);
     try std.testing.expect(isMatrix(struct {not_data: f64}) == false);
@@ -126,10 +119,7 @@ pub fn Mat(comptime shape: [2]usize) type {
 
         pub fn fill(mat: *This, fill_with: f64) void {
             for (&mat.data) |*row| {
-                var i: usize = 0;
-                while (i < m) : (i+=1) {
-                    row[i] = fill_with;
-                }
+                row.* = @splat(fill_with);
             }
         }
 
@@ -273,12 +263,16 @@ pub fn Mat(comptime shape: [2]usize) type {
             }
             return out.t();
         }
+        fn randomNormalizedFloat(rand: std.Random) f64 {
+            const rand_float = rand.float(f64);
+            // rng_gen += 1;
+            return 2 * rand_float - 1;
+        }
     };
 }
 
 const layer_kind = union(enum) {input, hidden, output};
-fn Layer(class: layer_kind, op: MatOp, comptime len: usize, comptime parent_len: usize, comptime child_len: usize, batch_size: usize, input: ?[batch_size][len]f64) type {
-    _ = child_len;
+fn Layer(class: layer_kind, op: MatOp, comptime len: usize, comptime parent_len: usize, batch_size: usize, input: ?[batch_size][len]f64) type {
     return struct{
         weights: Mat(.{len, parent_len}) = undefined,
         z: Mat(.{len, batch_size}) = undefined,
@@ -287,23 +281,20 @@ fn Layer(class: layer_kind, op: MatOp, comptime len: usize, comptime parent_len:
         op: MatOp = undefined,
         kind: layer_kind,
         
-        fn init(layer: *@This(), ) void {
-            print("init layer with op: {any}, len: {d}\n", .{op, len});
+
+        /// - pass a random type to this function and the weights and biases will be initalized to deterministic (per rand seed) random floats
+        /// - random floats are normalized between -1 and 1
+        /// - otherwise, the internals will be 0 initalized
+        fn init(layer: *@This()) void {
+            // print("init layer with op: {any}, len: {d}\n", .{op, len});
             layer.op = op;
-            var prng = std.Random.Xoroshiro128.init(101 + rng_gen);
-            const rand = prng.random();
             layer.kind = class;
             // layer.nodes.init(0);
             // layer.nodes.randomFill(rand);
-
             switch (layer.kind) {
                 .hidden, .output => {
                     layer.bias.init(0);
-                    layer.bias.randomFill(rand);
-
                     layer.weights.init(0);
-                    layer.weights.randomFill(rand);
-
                     layer.z.init(0);
                     layer.a.init(0);
                 },
@@ -312,12 +303,13 @@ fn Layer(class: layer_kind, op: MatOp, comptime len: usize, comptime parent_len:
                     var temp = Mat(.{batch_size, len}).create(0);
                     temp.load(input.?);
                     layer.a = temp.t();
-                    // layer.a.init(0);
-                    // layer.a.load(input);
                 }
             }
-            layer.z.show();
-            layer.a.show();
+        }
+
+        fn random_fill_wb(self: *@This(), rand: std.Random) void {
+            self.bias.randomFill(rand);
+            self.weights.randomFill(rand);
         }
 
         pub fn pass(self: *@This(), layer_input: Mat(.{parent_len, batch_size})) void {
@@ -346,16 +338,15 @@ fn Layer(class: layer_kind, op: MatOp, comptime len: usize, comptime parent_len:
 pub fn NN(comptime def: []const struct { usize, MatOp }, comptime batch_size: usize, input: [batch_size][def[0][0]]f64) type {
     const depth = def.len;
     comptime var layers: [depth]type = undefined;
-
     // Create nodes and weights
-    var child_len: usize = 0;
+    // var child_len: usize = 0;
     var parent_len: usize = 0;
     inline for (def, 0..) |layer_def, layer| {
         const nodes_len = layer_def[0];
         if (layer > 0) parent_len = def[layer - 1][0];
 
-        if (layer < depth - 1) child_len = def[layer + 1][0]
-        else child_len = 0;
+        // if (layer < depth - 1) child_len = def[layer + 1][0]
+        // else child_len = 0;
 
         const kind: layer_kind = blk: {
             if (layer == 0) break :blk .input;
@@ -368,7 +359,6 @@ pub fn NN(comptime def: []const struct { usize, MatOp }, comptime batch_size: us
             layer_def[1], 
             nodes_len,
             parent_len, 
-            child_len, 
             batch_size, 
             if (kind == .input) input else null
         ); 
@@ -378,30 +368,84 @@ pub fn NN(comptime def: []const struct { usize, MatOp }, comptime batch_size: us
     const LayersTuple = std.meta.Tuple(&layers);
 
     return struct {
+        const This = @This();
+        // var rand_gen: usize = 0;
+
         layers: LayersTuple = undefined,
-        num_nodes: usize = 0,
+        num_nodes: usize = undefined,
         // renderer: Renderer(shape),
         // allocator: std.mem.Allocator,
+        pub fn new() This {
+            const self: This = comptime blk: {
+                // @compileLog("Creating new network with def");
+                // @compileLog(def);
+                var tmp: This = undefined;
+                tmp.num_nodes = 0;
 
-        pub fn new() @This() {
-            var self: @This() = undefined;
-            inline for (0.., def) |layer, layer_def| {
-                self.num_nodes += layer_def[0];
-                self.layers[layer].init();
-            }
-
-
-            print("New network with def {any}\n", .{def});
-            // const renderer = Renderer(shape);
-            // self.renderer = renderer.init(allocator);
-            // self.allocator = allocator;
+                for (0.., def) |layer, layer_def| {
+                    tmp.num_nodes += layer_def[0];
+                    tmp.layers[layer].init();
+                }
+                // @compileLog("Network Created");
+                break :blk tmp;
+            };
             return self;
         }
 
-        pub fn load(predefined_model_bin: []u8) @This() {
+        pub fn random_init(self: *This) void {
+            for (0..def.len) |layer| {
+                self.layers[layer].random_fill_wb();
+            }
+        }
+
+        // This functions accepts a parent directory that contains the contents of weights and biases for each layer
+        // CSV's should be titled according to the layer and matrix that they refer to. i.e. w1.csv, b2.csv, w3.csv
+        // the weights (and biases) labeled with 1 should refer to the first hidden layer of the network as the input layer does not recieve any weights
+        pub fn load_from_csv(comptime parent_path: []const u8) This {
+            _ = parent_path;
+            // const MAX_USIZE_DIGITS = 20;
+            var self = new();
+            _ = &self;
+            inline for (1..depth) |i| {
+                // comptime var layer_index_buffer: [MAX_USIZE_DIGITS]u8 = undefined;
+                // const layer_index_str = comptime std.fmt.bufPrint(&layer_index_buffer, "{d}", .{i}) catch unreachable;
+
+                // const weights_csv = @embedFile(parent_path ++ "/w" ++ layer_index_str ++ ".csv");
+                // const bias_csv = @embedFile(parent_path ++ "/b" ++ layer_index_str ++ ".csv");
+                // _ = bias_csv;
+
+                const layer_size = def[i][0];
+                const parent_layer_size = def[i - 1][0];
+                // const weights_shape: struct {usize, usize} = .{layer_size, parent_layer_size};
+
+                // var weights_iter = comptime std.mem.splitSequence(u8, weights_csv, ",");
+                
+                // print("Weights shape: {d}x{d}\n", .{layer_size, parent_layer_size});
+                
+                comptime var j: usize = 0;
+                // for (0..parent_layer_size) |_| { 
+                while (j < parent_layer_size) : (j+=1) {// bypass the header row
+                    // _ = comptime weights_iter.next().?;
+                }
+
+                comptime var row: usize = 0;
+
+                // for (0..layer_size) |row| {
+                while (row < layer_size) : (row+=1) {
+                    var col: usize = 0;
+                    while (col < parent_layer_size) : (col+=1) {
+                        // @compileLog(j);
+                        // const weight_str = comptime weights_iter.next() orelse break;
+                        // _ = weight_str;
+                    }
+                }
+            }
+            return self;
+        }
+
+        pub fn load_from_bin(predefined_model_bin: []u8) @This() {
             var self: @This() = undefined;
             _ = &self;
-            // self.allocator = allocator;
             _ = predefined_model_bin;
         }
 
@@ -447,234 +491,11 @@ pub fn NN(comptime def: []const struct { usize, MatOp }, comptime batch_size: us
             }
         }
 
+        
+
         pub fn destroy(self: *@This()) void {
             _ = self;
             // self.renderer.destroy();
         }
     };
 }
-
-// const Renderer = 
-// fn Renderer(comptime nn_def: []const usize) type {
-// return struct {
-//     allocator: std.mem.Allocator,
-//     window: *glfw.Window = undefined,
-//     // shape: []const usize = undefined,
-    
-//     var network_shape: [nn_def.len]usize = undefined;
-//     network_shape = blk: {
-//         for (elem) |layer_nodes| {
-//             nodes += layer_nodes;
-//         }
-//         break :blk nodes;        
-//     }; // possible error when multiple models are loaded at once
-//     const num_nodes = blk: {
-//         var nodes = 0;
-//         for (shape) |layer_nodes| {
-//             nodes += layer_nodes;
-//         }
-//         break :blk nodes;        
-//     };
-
-//     fn init(allocator: std.mem.Allocator) Renderer(shape) {
-//         glfw.init() catch {
-//             @panic("Something happened while initializing glfw");
-//         };
-
-//         const gl_version_major: u16 = 4;
-//         const gl_version_minor: u16 = 0;
-//         glfw.windowHint(.client_api, .opengl_api);
-//         glfw.windowHint(.context_version_major, gl_version_major);
-//         glfw.windowHint(.context_version_minor, gl_version_minor);
-//         glfw.windowHint(.opengl_profile, .opengl_core_profile);
-//         glfw.windowHint(.opengl_forward_compat, true);
-//         glfw.windowHint(.doublebuffer, true);
-
-//         const win = glfw.Window.create(600, 600, "NN Visualizer", null, null) catch |err| {
-//             print("{any}\n", .{err});
-//             @panic("Failed to create the window");
-//         };
-
-//         glfw.makeContextCurrent(win);
-//         glfw.swapInterval(1);
-
-//         opengl.loadCoreProfile (
-//             glfw.getProcAddress,
-//             gl_version_major,
-//             gl_version_minor
-//         ) catch @panic("GLFW Proc init failed");
-
-//         zgui.init(allocator);
-
-//         _ = zgui.io.addFontFromFile( "font/CenturyModern.ttf", 32.0);
-
-//         zgui.backend.init(win);
-//         zgui.io.setConfigFlags(.{ .viewport_enable = false });
-//         return Renderer(shape) {
-//             .allocator = allocator,
-//             .window = win,
-//             // .shape = shape
-//         };
-        
-//     }
-
-//     pub fn destroy(self: *Renderer(shape)) void {
-//         zgui.backend.deinit();
-//         zgui.deinit();
-//         self.window.destroy();
-//         glfw.makeContextCurrent(null);
-//         glfw.terminate();
-//     }
-
-//     // fn node_coord_component_in_screen_space(self: *Renderer(shape)) void {
-//     //
-//     // }
-
-//     pub fn updateAndRender(self: *Renderer(shape), nn: anytype) void {
-//         glfw.pollEvents();
-//         // _ = nn;
-
-//         const gl = opengl.bindings; // clear buffer
-//         const fb_size = self.window.getFramebufferSize(); // new frame buffer
-//         gl.viewport(0, 0, fb_size[0], fb_size[1]);
-//         gl.clearBufferfv(gl.COLOR, 0, &[_]f64{ 1.0, 0.7, 0.7, 1.0 });
-        
-//         const win = self.window.getSize(); // logical units (points)
-//         zgui.backend.newFrame(@intCast(win[0]), @intCast(win[1]));
-
-//         const cs = self.window.getContentScale();
-//         zgui.io.setDisplayFramebufferScale(cs[0], cs[1]);
-//         if (zgui.begin("Controls", .{})) {
-//             zgui.text("Tweak params here...", .{});
-//             // sliders / buttons etc.
-//         }
-//         zgui.end();
-
-//         // zgui.spacing();
-        
-//         // --- NN Graph window ---
-//         if (zgui.begin("NN Graph", .{ .flags = .{ .no_scrollbar = true, .no_scroll_with_mouse = true }})) {
-//             const canvas_sz = zgui.getContentRegionAvail(); // size available in window
-//             const canvas_pos0 = zgui.getCursorScreenPos(); // top-left in screen space
-//             const canvas_pos1: [2]f64 = .{canvas_pos0[0] + canvas_sz[0], canvas_pos0[1] + canvas_sz[1]}; // bottom-right in screen space
-//             const canvas_center_x, const canvas_center_y = .{canvas_pos0[0] + canvas_sz[0] / 2, canvas_pos0[1] + canvas_sz[1] / 2};
-
-//             _ = zgui.invisibleButton("canvas", .{.w = canvas_sz[0], .h = canvas_sz[1], .flags = .{.mouse_button_right = true, .mouse_button_left = true }});
-
-//             const dl = zgui.getWindowDrawList();
-
-//             // canvas
-            
-//             dl.addRectFilled(.{ .pmin = canvas_pos0, .pmax = canvas_pos1, .col = white});
-//             // dl.addCircleFilled(.{ .p = .{ canvas_center_x, canvas_center_y}, .r = 20.0, .col = red});
-            
-//             dl.addLine(.{ .p1 = .{canvas_pos0[0], canvas_center_y}, .p2 = .{canvas_pos1[0], canvas_center_y}, .col = red, .thickness = 1.0 });
-//             dl.addLine(.{ .p1 = .{canvas_center_x, canvas_pos0[1]}, .p2 = .{canvas_center_x, canvas_pos1[1]}, .col = red, .thickness = 1.0 });
-//             const layer_mid: f64 = (@as(f64, @floatFromInt(nn.layers.len)) - 1) / 2;
-//             const odd_layers = nn.layers.len % 2 == 1;
-             
-
-//             const node_r: f64 = 12.0;
-//             const node_spacing: f64 = 10.0 + node_r * 2;
-//             const layer_spacing: f64 = 50.0 + node_r * 2;
-
-//             // const node_positions = blk: { 
-//                 var temp_pos: [num_nodes][2]f64 = undefined;
-//                 // var temp_nodes: [num_nodes]Neuron(comptime weights_len: usize) = undefined;                
-//                 var temp_i: usize = 0;
-//                 inline for (0.., nn.layers) |i, layer| {
-//                     // 3 layers
-//                     // +  
-//                     //     +
-//                     //    
-//                     // +
-//                     //          +
-//                     // +    
-//                     //   
-//                     //     +
-//                     // +
-//                     const i_float = @as(f64, @floatFromInt(i));
-//                     const nodes = layer.nodes;
-                
-//                     const node_mid: f64 = (@as(f64, @floatFromInt(nodes.len)) - 1) / 2;
-//                     const odd_nodes = nodes.len % 2 == 1;
-//                     // print("odd nodes? {any}, nodes mid: {d}\n", .{odd_nodes, node_mid});
-//                     const layer_x = switch (odd_layers) {
-//                         true => val: {
-//                             if (i_float < layer_mid) break :val canvas_center_x - layer_spacing * @abs(i_float - layer_mid);
-//                             if (i_float > layer_mid) break :val canvas_center_x + layer_spacing * @abs(i_float - layer_mid);
-//                             break :val canvas_center_x;
-//                         },
-//                         false => val:  {
-//                             if (i_float < layer_mid) break :val canvas_center_x - layer_spacing * @abs(i_float - layer_mid);
-//                             break :val canvas_center_x + layer_spacing * @abs(i_float - layer_mid);
-//                         }
-//                     };
-
-//                     // const layer_children_pos: [nodes[0].weights][2]f64;
-//                     // pre-compute positions and add to array
-//                     for (0.., nodes) |j, node| {
-//                         _ = node;
-//                         const j_float = @as(f64, @floatFromInt(j));
-//                         const node_y = switch (odd_nodes) {
-//                             true => val: {
-//                                 if (j_float < node_mid) break :val canvas_center_y - node_spacing * @abs(j_float - node_mid);
-//                                 if (j_float > node_mid) break :val canvas_center_y + node_spacing * @abs(j_float - node_mid);
-//                                 break :val canvas_center_y;
-//                             },
-//                             false => val:  {
-//                                 if (j_float < node_mid) break :val canvas_center_y - node_spacing * @abs(j_float - node_mid);
-//                                 break :val canvas_center_y + node_spacing * @abs(j_float - node_mid);
-//                             }
-//                         };
-
-//                         const node_pos: [2]f64 = .{layer_x, node_y};
-
-                        
-
-//                         temp_pos[temp_i] = node_pos;
-//                         // temp_nodes[temp_i] = node;
-//                         temp_i += 1;
-
-                        
-//                         add_node(dl, node_pos, node_r);
-//                     }
-//                 }
-//                 // break :blk temp_pos;
-//             // };
-
-//             // for (node_positions) |pos| {
-
-//                 // add_node(dl, pos, node_r);
-//             // }
-//         }
-
-//         zgui.end();
-//         zgui.backend.draw();
-//         self.window.swapBuffers();
-//     }
-
-//     // colors (ABGR)
-//     // const grayU32 = zgui.colorConvertFloat3ToU32(.{0.7, 0.7, 0.7});
-//     const white: u32 = 0xff_ff_ff_ff;
-//     const pink: u32 = 0xff_99_99_ff;
-//     const gray: u32 = 0xff_99_99_99;
-//     const dark_gray: u32 = 0xff_dd_dd_dd;
-//     const red: u32 = 0xff_00_00_ff;
-//     const green = 0xff_00_ff_00;
-
-//     fn add_node(dl: zgui.DrawList, pos: [2]f64, r: f64) void {
-//         dl.addCircleFilled(.{ .p = pos , .r = r, .col = green});
-//         dl.addCircle(.{ .p = pos , .r = r, .col = gray, .thickness = 3.0});
-//     }
-
-//     fn add_edge(dl: zgui.DrawList, span: [2][2]f64, thickness: f64) void {
-//         dl.addLine(.{ .p1 = span[0], .p2 = span[1], .col = dark_gray, .thickness = thickness });
-//     }
-// };
-// }
-
-// test "create new nn" {
-//     // print("{any}", .{nn});
-//     // try std.testing.expect(add(3, 7) == 10);
-// }
