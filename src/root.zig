@@ -8,9 +8,8 @@ fn mix_max_normalize(mat: Mat) void {
     _ = mat;
 }
 
-pub const MatOp = union(enum(u8)) {
-    dot,
-    add,
+pub const Activation = union(enum(u8)) {
+    none,
     relu,
     sigmoid,
     softmax,
@@ -18,7 +17,7 @@ pub const MatOp = union(enum(u8)) {
 
 fn isMatrix(comptime maybe_mat_type: anytype) bool {
     const fields = std.meta.fields(maybe_mat_type);
-    if (fields.len != 1) return false;
+    // todo : gate on comptime n and m too
     return std.mem.eql(u8, fields[0].name, "data");
 }
 
@@ -29,7 +28,7 @@ test "test_isMatrix" {
     const test_mat_ptr = &test_mat;
     try std.testing.expect(isMatrix(@TypeOf(test_mat)) == true);
     try std.testing.expect(isMatrix(@TypeOf(test_mat_ptr.*)) == true);
-    try std.testing.expect(isMatrix(struct {not_data: f64}) == false);
+    try std.testing.expect(isMatrix(struct {not_data: f32}) == false);
 }
 
 fn mulIsDefined(comptime a_type: anytype, comptime b_type: anytype) bool {
@@ -45,7 +44,7 @@ fn addIsDefined(comptime a_type: anytype, comptime b_type: anytype) union(enum) 
     if (!isMatrix(a_type) or !isMatrix(b_type)) @compileError("The 'matrix' you provided is not really a matrix");
     // @compileLog(a_type.n, a_type.m, " ", b_type.n, b_type.m);
     if (a_type.n == b_type.n and a_type.m == b_type.m) return .full;
-    if (a_type.n == b_type.n) return .per_row;
+    if (a_type.n == b_type.n and a_type.m == 1) return .per_row;
     return .none;
 }
 
@@ -62,21 +61,19 @@ pub fn Mat(comptime shape: [2]usize) type {
         pub const m = shape[1]; // cols
         const Axis = union(enum) {r, c};
 
-        data: [n]@Vector(m, f64), // row-major [2, 4] is 2 rows x 4 columns
+        data: [n]@Vector(m, f32), // row-major [2, 4] is 2 rows x 4 columns
         
-        pub fn init(mat: *This, fill_with: f64) void {
+        pub fn init(mat: *This, fill_with: f32) void {
             mat.fill(fill_with);
         }
 
-        pub fn create(fill_with: f64) This {
+        pub fn create(fill_with: f32) This {
             var mat: Mat(shape) = undefined;
             mat.fill(fill_with);
-            // print("new {d}x{d} mat\n", .{mat.rows, mat.cols});
             return mat;
         }
 
-        pub fn load(mat: *This, arr_mat: anytype) void {
-            // TODO verify the arr mat is an array at comptime and that it has the same shape as the current matrix
+        pub fn load(mat: *This, arr_mat: [n][m]f32) void {
             for (0..n) |row| {
                 for (0..m) |col| {
                     mat.data[row][col] = arr_mat[row][col];
@@ -100,11 +97,11 @@ pub fn Mat(comptime shape: [2]usize) type {
             return m;
         }
 
-        pub inline fn set(self: *This, row: usize, col: usize, val: f64) void {
+        pub inline fn set(self: *This, row: usize, col: usize, val: f32) void {
             self.data[row][col] = val;
         }
 
-        pub inline fn get(self: *const This, row: usize, col: usize) f64 {
+        pub inline fn get(self: *const This, row: usize, col: usize) f32 {
             return self.data[row][col];
         }
 
@@ -117,13 +114,13 @@ pub fn Mat(comptime shape: [2]usize) type {
             }
         }
 
-        pub fn fill(mat: *This, fill_with: f64) void {
+        pub fn fill(mat: *This, fill_with: f32) void {
             for (&mat.data) |*row| {
                 row.* = @splat(fill_with);
             }
         }
 
-        fn max_row(row: @Vector(m, f64)) f64 {
+        fn max_row(row: @Vector(m, f32)) f32 {
             return @reduce(.Max, row);
         }
 
@@ -135,7 +132,7 @@ pub fn Mat(comptime shape: [2]usize) type {
             return out;
         }
         
-        fn sum_row(row: @Vector(m, f64)) f64 {
+        fn sum_row(row: @Vector(m, f32)) f32 {
             return @reduce(.Add, row);
         }
 
@@ -147,8 +144,8 @@ pub fn Mat(comptime shape: [2]usize) type {
             return out;
         }
 
-        fn exp_row(row: @Vector(m, f64)) @Vector(m, f64) {
-            var out: @Vector(m, f64) = undefined;
+        fn exp_row(row: @Vector(m, f32)) @Vector(m, f32) {
+            var out: @Vector(m, f32) = undefined;
             for (0..m) |i| {
                 out[i] =  @exp(row[i]);
             }
@@ -180,8 +177,8 @@ pub fn Mat(comptime shape: [2]usize) type {
                             out.data[row] = a.data[row] + b.data[row];
                         },
                 .per_row => for (0..out.rows()) |row| { // simd per row due to vector type
-                            const bi: f64 = b.data[row][0];
-                            out.data[row] = a.data[row] + @as(@Vector(m, f64), @splat(bi));
+                            const bi: f32 = b.data[row][0];
+                            out.data[row] = a.data[row] + @as(@Vector(m, f32), @splat(bi));
                         },
                 .none => @compileError("Your add is misaligned, A and B must have matching rows!")
             }     
@@ -195,15 +192,15 @@ pub fn Mat(comptime shape: [2]usize) type {
                             out.data[row] = a.data[row] - b.data[row];
                         },
                 .per_row => for (0..out.rows()) |row| { // simd per row due to vector type
-                            const bi: f64 = b.data[row][0];
-                            out.data[row] = a.data[row] - @as(@Vector(m, f64), @splat(bi));
+                            const bi: f32 = b.data[row][0];
+                            out.data[row] = a.data[row] - @as(@Vector(m, f32), @splat(bi));
                         },
                 .none => @compileError("Your sub is misaligned, A and B must have matching rows!")
             }     
             return out;
         }
 
-        fn dot(comptime l: usize, a: @Vector(l, f64), b: @Vector(l, f64)) f64 {
+        fn dot(comptime l: usize, a: @Vector(l, f32), b: @Vector(l, f32)) f32 {
             return @reduce(.Add, a*b);
         }
 
@@ -215,7 +212,7 @@ pub fn Mat(comptime shape: [2]usize) type {
             const b_t = b.t();
 
             for (0..n) |row| { 
-                var out_row: @Vector(@TypeOf(b).m, f64) = undefined;
+                var out_row: @Vector(@TypeOf(b).m, f32) = undefined;
                 for (0..@TypeOf(b).m) |col| {
                     out_row[col] = dot(m, a.data[row], b_t.data[col]);
                 }
@@ -239,7 +236,6 @@ pub fn Mat(comptime shape: [2]usize) type {
 
         pub fn sigmoid(mat: *const This) This {
             var out = Mat(shape).create(0);
-            print("sigmoid\n\n", .{});
             for (0..mat.rows()) |row| {
                 for (0..mat.cols()) |col| {
                     out.set(row, col, 1 / (1 + @exp(-mat.get(row, col))));
@@ -247,50 +243,51 @@ pub fn Mat(comptime shape: [2]usize) type {
             }
             return out;
          }
-
+        
         pub fn softmax(mat: *const This) This {
-            print("softmax\n\n", .{});
-            var out = mat.t();
+            // We transpose the matrix immediately, so that we may compute softmax per column in, but treat them per row for SIMD purposes
+            var out = mat.t(); 
+
+            // Here, we subtract the max value from each element's row before exponentiating to avoid overflow
             for (0..out.rows()) |r| {
                 const maxv = @reduce(.Max, out.data[r]);
-                out.data[r] -= @as(@Vector(@TypeOf(out).m, f64), @splat(maxv));
+                out.data[r] -= @as(@Vector(@TypeOf(out).m, f32), @splat(maxv));
             }
+
+            // softmax per row (allowed since transposed)
             const e_mat = out.exp();
             const e_sum = e_mat.sum();
             for (0..out.rows()) |i| {
                 const inv = 1.0 / e_sum.get(i, 0);
-                out.data[i] = e_mat.data[i] * @as(@Vector(n, f64), @splat(inv));
+                out.data[i] = e_mat.data[i] * @as(@Vector(n, f32), @splat(inv));
             }
+            // transpose the output again to retain correct shape
             return out.t();
         }
-        fn randomNormalizedFloat(rand: std.Random) f64 {
-            const rand_float = rand.float(f64);
-            // rng_gen += 1;
+
+        fn randomNormalizedFloat(rand: std.Random) f32 {
+            const rand_float = rand.float(f32);
             return 2 * rand_float - 1;
         }
     };
 }
 
 const layer_kind = union(enum) {input, hidden, output};
-fn Layer(class: layer_kind, op: MatOp, comptime len: usize, comptime parent_len: usize, batch_size: usize, input: ?[batch_size][len]f64) type {
+fn Layer(kind: layer_kind, activation: Activation, comptime len: usize, comptime parent_len: usize, batch_size: usize) type {
     return struct{
         weights: Mat(.{len, parent_len}) = undefined,
         z: Mat(.{len, batch_size}) = undefined,
         a: Mat(.{len, batch_size}) = undefined,
         bias: Mat(.{len, 1}) = undefined,
-        op: MatOp = undefined,
+        activation: Activation = undefined,
         kind: layer_kind,
-        
 
         /// - pass a random type to this function and the weights and biases will be initalized to deterministic (per rand seed) random floats
         /// - random floats are normalized between -1 and 1
         /// - otherwise, the internals will be 0 initalized
         fn init(layer: *@This()) void {
-            // print("init layer with op: {any}, len: {d}\n", .{op, len});
-            layer.op = op;
-            layer.kind = class;
-            // layer.nodes.init(0);
-            // layer.nodes.randomFill(rand);
+            layer.activation = activation;
+            layer.kind = kind;
             switch (layer.kind) {
                 .hidden, .output => {
                     layer.bias.init(0);
@@ -300,32 +297,29 @@ fn Layer(class: layer_kind, op: MatOp, comptime len: usize, comptime parent_len:
                 },
                 .input => {
                     layer.z.init(0);
-                    var temp = Mat(.{batch_size, len}).create(0);
-                    temp.load(input.?);
-                    layer.a = temp.t();
+                    layer.a.init(0);
                 }
             }
         }
 
-        fn random_fill_wb(self: *@This(), rand: std.Random) void {
-            self.bias.randomFill(rand);
-            self.weights.randomFill(rand);
+        fn random_fill_wb(self: *@This(), prng: std.Random.Xoshiro256) void {
+            if (self.kind == .input) @panic("Input layer has no weights or biases to fill");
+            self.bias.randomFill(prng.random());
+            self.weights.randomFill(prng.random());
         }
 
-        pub fn pass(self: *@This(), layer_input: Mat(.{parent_len, batch_size})) void {
-            // print("weights {d}x{d}\ninput {d}x{d}\n", .{self.weights.rows(), self.weights.cols(), input.rows(), input.cols()});
+        pub fn forward(self: *@This(), layer_input: Mat(.{parent_len, batch_size})) void {
             if (self.kind == .input) @panic("Do not pass over the input layer. Complete all normalization and preprocessing prior to forward feed");
             self.z = self.weights.mul(layer_input).add(self.bias);
-            self.a = a: switch (self.op) {
+            self.a = a: switch (self.activation) {
                 .relu => self.z.relu(),
                 .sigmoid => {
                     break :a self.z.sigmoid();
                 },
                 .softmax => {
-                    // if (len > 1) return;
                     break :a self.z.softmax();
                 },
-                else => unreachable
+                .none => unreachable
             };
         }
     };
@@ -335,7 +329,7 @@ fn Layer(class: layer_kind, op: MatOp, comptime len: usize, comptime parent_len:
 /// - The shape should be of a array type
 /// - The length of the tuple denotes the depth (number of layers) of the network
 /// - Each entry of the tuple denotes how many neurons per layer
-pub fn NN(comptime def: []const struct { usize, MatOp }, comptime batch_size: usize, input: [batch_size][def[0][0]]f64) type {
+pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_size: usize) type {
     const depth = def.len;
     comptime var layers: [depth]type = undefined;
     // Create nodes and weights
@@ -359,11 +353,8 @@ pub fn NN(comptime def: []const struct { usize, MatOp }, comptime batch_size: us
             layer_def[1], 
             nodes_len,
             parent_len, 
-            batch_size, 
-            if (kind == .input) input else null
-        ); 
-
-        
+            batch_size
+        );
     }
     const LayersTuple = std.meta.Tuple(&layers);
 
@@ -375,10 +366,10 @@ pub fn NN(comptime def: []const struct { usize, MatOp }, comptime batch_size: us
         num_nodes: usize = undefined,
         // renderer: Renderer(shape),
         // allocator: std.mem.Allocator,
+
+        /// Build a new predefined NN with the definition provided
         pub fn new() This {
             const self: This = comptime blk: {
-                // @compileLog("Creating new network with def");
-                // @compileLog(def);
                 var tmp: This = undefined;
                 tmp.num_nodes = 0;
 
@@ -386,112 +377,105 @@ pub fn NN(comptime def: []const struct { usize, MatOp }, comptime batch_size: us
                     tmp.num_nodes += layer_def[0];
                     tmp.layers[layer].init();
                 }
-                // @compileLog("Network Created");
                 break :blk tmp;
             };
             return self;
         }
 
-        pub fn random_init(self: *This) void {
-            for (0..def.len) |layer| {
-                self.layers[layer].random_fill_wb();
+        pub fn random_init(self: *This, seed: usize) void {
+            var prng = std.Random.Xoshiro256.init(seed);
+            inline for (1..def.len) |layer| {
+                self.layers[layer].random_fill_wb(&prng);
             }
         }
 
-        // This functions accepts a parent directory that contains the contents of weights and biases for each layer
-        // CSV's should be titled according to the layer and matrix that they refer to. i.e. w1.csv, b2.csv, w3.csv
-        // the weights (and biases) labeled with 1 should refer to the first hidden layer of the network as the input layer does not recieve any weights
-        pub fn load_from_csv(comptime parent_path: []const u8) This {
-            _ = parent_path;
-            // const MAX_USIZE_DIGITS = 20;
-            var self = new();
-            _ = &self;
-            inline for (1..depth) |i| {
-                // comptime var layer_index_buffer: [MAX_USIZE_DIGITS]u8 = undefined;
-                // const layer_index_str = comptime std.fmt.bufPrint(&layer_index_buffer, "{d}", .{i}) catch unreachable;
 
-                // const weights_csv = @embedFile(parent_path ++ "/w" ++ layer_index_str ++ ".csv");
-                // const bias_csv = @embedFile(parent_path ++ "/b" ++ layer_index_str ++ ".csv");
-                // _ = bias_csv;
+        /// Pass the directory to your pretrained weights and biases and import them to the model here
+        /// - Files should be labeled as "w1.bin, b1.bin, w2.bin, ... and so on"
+        /// Weights and biases begin at 1 because the 'zeroth' layer is the input layer and does not possess weights or biases
+        pub fn load_from_bin(comptime param_directory_path: []const u8) This {
+            var self: This = new();
+            const MAX_USIZE_DIGITS = 20;
+            for (1..def.len) |i| {
+                var layer_str_buf: [MAX_USIZE_DIGITS]u8 = undefined;
+                const layer_str = std.fmt.bufPrint(&layer_str_buf, "{d}", .{i}) catch unreachable;
+                const w= std.mem.bytesAsSlice(f32, @embedFile(param_directory_path ++ "/w" ++ layer_str ++ ".bin"));
+                const b= std.mem.bytesAsSlice(f32, @embedFile(param_directory_path ++ "/b" ++ layer_str ++ ".bin"));
 
-                const layer_size = def[i][0];
-                const parent_layer_size = def[i - 1][0];
-                // const weights_shape: struct {usize, usize} = .{layer_size, parent_layer_size};
-
-                // var weights_iter = comptime std.mem.splitSequence(u8, weights_csv, ",");
-                
-                // print("Weights shape: {d}x{d}\n", .{layer_size, parent_layer_size});
-                
-                comptime var j: usize = 0;
-                // for (0..parent_layer_size) |_| { 
-                while (j < parent_layer_size) : (j+=1) {// bypass the header row
-                    // _ = comptime weights_iter.next().?;
-                }
-
-                comptime var row: usize = 0;
-
-                // for (0..layer_size) |row| {
-                while (row < layer_size) : (row+=1) {
-                    var col: usize = 0;
-                    while (col < parent_layer_size) : (col+=1) {
-                        // @compileLog(j);
-                        // const weight_str = comptime weights_iter.next() orelse break;
-                        // _ = weight_str;
-                    }
-                }
+                // downcast to f16 for storage
+                // var w_f16: [w.len]f16 = undefined;
+                // var b_f16: [b.len]f16 = undefined;
+                // inline for (w, 0..) |val, j| {
+                //     w_f16[j] = @floatCast(val);
+                // }
+                // inline for (b, 0..) |val, j| {
+                //     b_f16[j] = @floatCast(val);
+                // }
+                self.layer_from_bin(i, w, b);
+                // @compileLog(bin.len);
+                // @compileLog(bin[0]);
+                // @compileLog(bin[1]);
+                // @compileLog(bin[2]);
             }
             return self;
         }
 
-        pub fn load_from_bin(predefined_model_bin: []u8) @This() {
-            var self: @This() = undefined;
-            _ = &self;
-            _ = predefined_model_bin;
+        fn layer_from_bin(self: *This, layer: usize, w_bin: []align(1) const f32, b_bin: []align(1) const f32) void {
+            var weights = &self.layers[layer].weights;
+            var bias = &self.layers[layer].bias;
+            if (w_bin.len != weights.rows() * weights.cols()) @compileError("Provided weights do not match the expected shape");
+            if (b_bin.len != bias.rows() * bias.cols()) @compileError("Provided biases do not match the expected shape");
+            for (0..weights.rows()) |i| {
+                const offset = i * weights.cols();
+                weights.data[i] = @as(@Vector(weights.cols(), f32), w_bin[offset..offset + weights.cols()].*);
+            }
+            for (0..bias.rows()) |i| {
+                const offset = i * bias.cols();
+                bias.data[i] = @as(@Vector(bias.cols(), f32), b_bin[offset..offset + bias.cols()].*);
+            }
         }
 
         pub fn show(self: *@This()) void {
             inline for (0.., self.layers) |i, layer| {
                 print("Layer {d} | ", .{i});
-                print("Nodes: {any}\n", .{layer.nodes});
-                print("Layer {d} has {d} nodes and {d} connections\n", .{i, layer.nodes.rows(), layer.weights.cols() * layer.nodes.rows()});
+                print("Nodes: {any}\n", .{layer.a.rows()});
+                print("Layer {d} has {d} nodes and {d} connections\n", .{i, layer.a.rows(), layer.weights.cols() * layer.a.rows()});
                 print("\n", .{});
             }
         }
 
-        // pub fn view(self: *@This()) void {
-        //     while (!self.renderer.window.shouldClose()) {
-        //         self.renderer.updateAndRender(self);
+        // pub fn train(nn: *@This(), iterations: usize) void {
+        //     const bar_size = 35;
+        //     var bar: [bar_size + 1]u8 = undefined;
+        //     bar[bar_size] = '|';
+        //     var iter: usize = 0;
+        //     while (iter < iterations + 1) : (iter+=1) {
+        //         // loading bar
+        //         const dist: usize = bar_size * iter / iterations;
+        //         for (0..bar_size) |i| {
+        //             bar[i] = if (i < dist) '*' else '-';
+        //         }
+        //         print("\riter {d}: {s}", .{iter, bar});
+        //         nn.forward();
+        //         // backprop
         //     }
+        //     print("\n", .{});
         // }
 
-        pub fn train(nn: *@This(), iterations: usize) void {
-            const bar_size = 35;
-            var bar: [bar_size + 1]u8 = undefined;
-            bar[bar_size] = '|';
-            var iter: usize = 0;
-            while (iter < iterations + 1) : (iter+=1) {
-                // loading bar
-                const dist: usize = bar_size * iter / iterations;
-                for (0..bar_size) |i| {
-                    bar[i] = if (i < dist) '*' else '-';
-                }
-                print("\riter {d}: {s}", .{iter, bar});
-                nn.forward();
-                // backprop
-            }
-            print("\n", .{});
-        }
-
-        pub fn forward(self: *@This()) void {
-            inline for (1..depth) |i| {
+        pub fn forward(self: *@This(), input: [batch_size][def[0][0]]f32) Mat(.{def[depth-1][0], batch_size}) {
+            var temp = Mat(.{batch_size, def[0][0]}).create(0);
+            temp.load(input);
+            self.layers[0].a = temp.t();
+             inline for (1..depth) |i| {
                 // @compileLog(i);
                 var layer = &self.layers[i];
+                // print("layer: {d}\n", .{i});
+                // print("layer kind: {any}\n", .{layer.kind});
                 const prev_out = self.layers[i - 1].a;
-                layer.pass(prev_out);
+                layer.forward(prev_out);
             }
+            return self.layers[depth-1].a;
         }
-
-        
 
         pub fn destroy(self: *@This()) void {
             _ = self;

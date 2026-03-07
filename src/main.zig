@@ -2,116 +2,62 @@ const std = @import("std");
 const ffnn = @import("ffnn");
 const NN = ffnn.NN;
 const Mat = ffnn.Mat;
-const MatOp = ffnn.MatOp;
+const Activation = ffnn.Activation;
 const print = std.debug.print;
 
-pub fn main() !void {
-    var gpa: std.heap.DebugAllocator(.{}) = .init;
-    defer {
-            switch (gpa.deinit()) {
-                .leak => print("Mem leaked\n", .{}),
-                .ok => print("No mem leak detected\n", .{})
-
-            }
-        }
+pub fn main() void {
     @setEvalBranchQuota(2_000_000_000);
-    // var mat = Mat(.{3, 2}).create(0);
-    // // mat.init(0);
-    // const mat_template: [3][2]f64 = .{ 
-    //     .{1, 2},
-    //     .{3, 4},
-    //     .{5, 6} 
-    // };
-    // mat.load(mat_template);
-    // mat.show();
 
-    // var mat2 = Mat(.{2, 4}).create(0);
-    // // mat2.init(0);
-    // const mat_template2: [2][4]f64 = .{
-    //     .{6, 5, 4, 3},
-    //     .{2, 1, 0, -1},
-    // };
-    // mat2.load(mat_template2);
+    const csi = "\x1b";
+    const img = @embedFile("preprocessed_imgs/3/img.bin");
+    const pixels = std.mem.bytesAsSlice(f32, img);
 
-    // var vector = Mat(.{1, 5}).create(0);
-    // const vector_template: [1][5]f64 = .{
-    //     .{57, -23, 3, 45, 10}
-    // };
-    // vector.load(vector_template);
-    // vector.show();
-    // var softmax = vector.softmax();
-    // softmax.show();
-
-    // var sigmoid = vector.sigmoid();
-    // sigmoid.show();
-
-    // var relu = vector.relu();
-    // relu.show();
-
-    // var mul_res = mat.mul(mat2);
-    // mul_res.show();
-    // const e_mul = mul_res.exp();
-    // e_mul.show();
-    // var mat_t = mat.t();
-    // mat_t.show();
-    const entry_ct = 3;
+    const entry_ct = 1;
     const feature_ct = 784;
-    const data: [entry_ct][feature_ct]f64 = .{ 
+    var data: [entry_ct][feature_ct]f32 = .{ 
         .{0} ** feature_ct,
-        .{0} ** feature_ct,
-        .{0} ** feature_ct
     };
 
-    const input_type = Mat(.{entry_ct, feature_ct});
-    var input = input_type.create(0);
-    input.load(data);
+    for (0..28) |row| {
+        for (0..28) |col| {
+            const val = pixels[col + row * 28];
+            const color = 232 + @as(usize, @intFromFloat(val * 24.0)); // 232 - 255 are grayscale
+            data[0][col + row * 28] = @floatCast(val);
+            print(csi ++ "[48;5;{d}m  ", .{color});
+        }
+        print(csi ++ "[0m\n", .{});
+    }
 
-    // input.show();
-    const def: []const struct { usize, MatOp} = &.{ 
-        .{feature_ct, .relu}, 
+    
+    
+
+    const def: []const struct { usize, Activation} = &.{ 
+        .{feature_ct, .none}, 
         .{128, .relu}, 
         .{64, .relu}, 
         .{10, .softmax}
     };
-    const Net = NN(def, entry_ct, data);
-    var nn = comptime Net.load_from_csv("data/params");
+    const Net = NN(def, entry_ct);
+    var nn = comptime Net.load_from_bin("model_params");
+    const preds = nn.forward(data);
+    preds.show();
+    const preds_row = preds.t();
+    const certainty = preds_row.max().get(0,0);
 
-    nn.layers[0].z.show();
-    nn.layers[0].a.show();
-    // _ = &nn;
+    print("Certainty: {any}\n", .{certainty});
+    var guess: u8 = 0;
+    while(guess < 10) : (guess+=1) {
+        if (preds_row.get(0, guess) == certainty)
+            break;
+    } else unreachable;
 
-    // const sig_test: [1][2]f64 = .{
-    //     .{ -4.76887372491392, -11.067189709820568 },
-    // };
-
-    // var mat = Mat(.{1, 2}).create(0);
-    // mat.load(sig_test);
-    // print("Sum: {any}\n", .{mat.sum()});
-
-    // mat.show();
-    // mat.sigmoid().show();
-    // mat.show();
-
-
-
-    // nn.forward();
-
-    // inline for (0..def.len) |i| {
-    //     print("\nLayer {d}\n", .{i + 1});
-    //     print("Z |\t", .{});
-    //     nn.layers[i].z.show();
-    //     print("\nA |\t", .{});
-    //     nn.layers[i].a.show();
+    // var guess: u8 = undefined;
+    // var certainty: f32 = 0.0;
+    // for (0..10) |num| {
+    //     if (preds.data[num][0] > certainty) {
+    //         certainty = preds.data[num][0];
+    //         guess = @intCast(num);
+    //     }
     // }
-
-    // nn.layers[0].z.show();
-    // nn.layers[0].a.show();
-
-    // nn.layers[3].z.show();
-    // nn.layers[3].a.show();
-
-
-
-    // nn.view();
-    // nn.destroy();
+    print("Guess: {d}", .{guess});
 }
