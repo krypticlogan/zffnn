@@ -399,7 +399,7 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
             var self: This = new();
             const MAX_USIZE_DIGITS = 20;
             for (1..def.len) |i| {
-                var layer_str_buf: [MAX_USIZE_DIGITS]u8 = undefined;
+                comptime var layer_str_buf: [MAX_USIZE_DIGITS]u8 = undefined;
                 const layer_str = std.fmt.bufPrint(&layer_str_buf, "{d}", .{i}) catch unreachable;
                 const w= std.mem.bytesAsSlice(f32, @embedFile(param_directory_path ++ "/w" ++ layer_str ++ ".bin"));
                 const b= std.mem.bytesAsSlice(f32, @embedFile(param_directory_path ++ "/b" ++ layer_str ++ ".bin"));
