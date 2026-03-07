@@ -8,11 +8,11 @@ const defintion: []const struct { usize, MatOp} = &.{
     .{15, .sigmoid}, 
     .{2, .softmax}
 };
-const Net = NN(definition, batch_size, data);
+const Net = NN(definition, batch_size);
 var nn = Net.new();
 
 nn.train(training_data, 1000); // SGD training
-nn.forward(); // for inference
+nn.forward(input); // for inference
 ```
 ## Description
 ZFFNN is a statically defined dense neural network engine.
