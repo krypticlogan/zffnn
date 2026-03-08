@@ -73,13 +73,13 @@ Unlike PyTorch or TensorFlow, which prioritize being dynamic and flexibile, some
 This engine embraces the static and predictable architecture, where the model is entirely stable at runtime. Changing the network's definition requires recompilation, allowing for the compiler to verify correctness before execution.
 
 This lib is not a replacement for those libraries mentioned previously, but by omitting dynamic control and runtime allocation we gain determinism and simplicity, and retain.
-With this, it excels at creating tiny binaries for pretrained, deterministic neural networks.
+With this, it excels at creating tiny binaries for pretrained, deterministic neural networks and excel in speed through compile time optimizations.
 
 While training will be supported, the natural use case is for inference on pretrained models in a constrained environment.
 
 The network itself compiles to a static binary for any user-defined network, so it is well suited for microcontrollers, single-board computers, and other environments where space and predictability are imperative.
 
-To load a model you trained in PyTorch, load binaries for the weights and biases and they'll be built into the network
+To load a model you trained in PyTorch, load binaries for the weights and biases and they'll be built into the network.
 .
 ## Features:
 - Dense NN of arbitrary size built at compile time
