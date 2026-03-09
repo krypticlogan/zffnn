@@ -1,7 +1,42 @@
 # Zig FFNN
 
+## How to build and use
+Download and save zffnn as a dependency of the project
+```
+zig fetch --save git+https://github.com/krypticlogan/zffnn
+```
+
+In your build.zig file, load the module as a dependency.
+```zig
+const nn_dep = b.dependency("zffnn", .{
+        .target = target,
+        .optimize = optimize,
+    });
+const zffnn = nn_dep.module("zffnn");
+```
+
+Then later on, when creating your target, add the module as an import.
+```zig
+const exe = b.addExecutable(.{
+    .name = "demo",
+    .root_module = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "zffnn", .module = zffnn }, // import the module here
+        },
+        .link_libc = true,
+    }),
+});
+```
+
 ## User-defined NN Example for pretrained weights
-```ruby
+```zig
+const zf = @import("zffnn");
+const Activation = zf.Activation;
+const NN = zf.NN;
+
 const definition: []const struct { usize, Activation } = &.{ 
     .{feature_ct, .none}, 
     .{10, .relu}, 
@@ -9,9 +44,10 @@ const definition: []const struct { usize, Activation } = &.{
     .{2, .softmax}
 };
 const Net = NN(definition, batch_size);
-var nn = Net.load_from_bin(path_to_binaries);
+var nn = comptime Net.load_from_bin(path_to_binaries);
 
-const preds = nn.forward(input); // for inference
+const preds = nn.forward(input); // for inference # everything prior to this is comptime
+preds.show();
 ```
 ## Description
 ZFFNN is a statically defined feedforward neural network engine.
@@ -29,23 +65,22 @@ Matrices and network internals are resolved to shape-encoded types and verified 
 
 Matrices are stored row-major and use Zig's @Vector type internally to facilitate SIMD operations where applicable.
 
-*Poorly defined models (shape mismatch, incorrect use of activations/ops, etc.) will **never** compile.*
+*Poorly defined models (shape mismatch, incorrect use of activations/ops, etc.) will never compile.*
 
 ## Philosophy
-As opposed to established frameworks (PyTorch, TensorFlow), which prioritize being dynamic and flexibile, sometimes a static and predictable system is preferred. 
-zffn embraces the static and predictable architecture, where the model is entirely static at runtime. Changing the network's definitio requires recompilation, allowing for the compiler to verify correctness before execution.
+Unlike PyTorch or TensorFlow, which prioritize being dynamic and flexibile, sometimes a static and predictable system is preferred. 
 
-This lib is *not* a PyTorch replacement, by omitting dynamic control and runtime allocation we gain determinism and simplicity.
-With this, it excels at creating tiny binaries for pretrained, deterministic neural networks.
+This engine embraces the static and predictable architecture, where the model is entirely stable at runtime. Changing the network's definition requires recompilation, allowing for the compiler to verify correctness before execution.
 
-While training will be supported, the more natural use case is for inference on pretrained models in a constrained environment.
+This lib is not a replacement for those libraries mentioned previously, but by omitting dynamic control and runtime allocation we gain determinism and simplicity, and retain.
+With this, it excels at creating tiny binaries for pretrained, deterministic neural networks and excel in speed through compile time optimizations.
 
-ZFFNN compiles to a static binary for any user-defined network, so it is well suited for microcontrollers, single-board computers (Raspberry Pi), and other environments where space and predictability are imperative.
+While training will be supported, the natural use case is for inference on pretrained models in a constrained environment.
 
-It is also able to load arbitrary network definitions from pretrained models and create itself at compile time, given a binary that defines weights and bias (typically from PyTorch).
+The network itself compiles to a static binary for any user-defined network, so it is well suited for microcontrollers, single-board computers, and other environments where space and predictability are imperative.
 
-This provides the ability to do inference on a system where speed, space, and correctness are vital.
-
+To load a model you trained in PyTorch, load binaries for the weights and biases and they'll be built into the network.
+.
 ## Features:
 - Dense NN of arbitrary size built at compile time
 - Static memory (zero heap allocations)
