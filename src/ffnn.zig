@@ -2,12 +2,6 @@
 const std = @import("std");
 const print = std.debug.print;
 
-
-
-fn mix_max_normalize(mat: Mat) void {
-    _ = mat;
-}
-
 pub const Activation = union(enum(u8)) {
     none,
     relu,
@@ -16,49 +10,26 @@ pub const Activation = union(enum(u8)) {
 };
 
 fn isMatrix(comptime maybe_mat_type: anytype) bool {
+    // @compileLog(maybe_mat_type);
     const fields = std.meta.fields(maybe_mat_type);
     // todo : gate on comptime n and m too
     return std.mem.eql(u8, fields[0].name, "data");
 }
 
-
-
 test "test_isMatrix" {
-    var test_mat = Mat(.{2, 4}).create(0);
+    var test_mat = Mat(2, 4).create(0);
     const test_mat_ptr = &test_mat;
+    try std.testing.expect(isMatrix(Mat(3, 4)) == true);
     try std.testing.expect(isMatrix(@TypeOf(test_mat)) == true);
     try std.testing.expect(isMatrix(@TypeOf(test_mat_ptr.*)) == true);
     try std.testing.expect(isMatrix(struct {not_data: f32}) == false);
 }
 
-fn mulIsDefined(comptime a_type: anytype, comptime b_type: anytype) bool {
-    return a_type.m == b_type.n;
-}
-
-test "test_isMulDefined" {
-    try std.testing.expect(mulIsDefined(Mat(.{4, 2}), Mat(.{2, 5})) == true);
-    try std.testing.expect(mulIsDefined(Mat(.{1, 2}), Mat(.{3, 4})) == false);
-}
-
-fn addIsDefined(comptime a_type: anytype, comptime b_type: anytype) union(enum) {none, full, per_row} {
-    if (!isMatrix(a_type) or !isMatrix(b_type)) @compileError("The 'matrix' you provided is not really a matrix");
-    // @compileLog(a_type.n, a_type.m, " ", b_type.n, b_type.m);
-    if (a_type.n == b_type.n and a_type.m == b_type.m) return .full;
-    if (a_type.n == b_type.n and a_type.m == 1) return .per_row;
-    return .none;
-}
-
-test "test_isAddDefined" {
-    // try std.testing.expect(addIsDefined(Mat(.{2, 4}), Mat(.{2, 4})) == true);
-    // try std.testing.expect(addIsDefined(Mat(.{1, 2}), Mat(.{3, 4})) == false);
-}
-
-pub fn Mat(comptime shape: [2]usize) type {
-    
+pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
     return struct {
         const This = @This();
-        pub const n = shape[0]; // rows
-        pub const m = shape[1]; // cols
+        pub const n = row_ct;
+        pub const m = col_ct;
         const Axis = union(enum) {r, c};
 
         data: [n]@Vector(m, f32), // row-major [2, 4] is 2 rows x 4 columns
@@ -68,7 +39,7 @@ pub fn Mat(comptime shape: [2]usize) type {
         }
 
         pub fn create(fill_with: f32) This {
-            var mat: Mat(shape) = undefined;
+            var mat: Mat(n, m) = undefined;
             mat.fill(fill_with);
             return mat;
         }
@@ -120,12 +91,17 @@ pub fn Mat(comptime shape: [2]usize) type {
             }
         }
 
+        pub fn clear(mat: *This) void {
+            mat.* = undefined;
+            mat.* = This.create(0);
+        }
+
         fn max_row(row: @Vector(m, f32)) f32 {
             return @reduce(.Max, row);
         }
 
-        pub fn max(mat: *const This) Mat(.{n, 1}) {
-            var out = Mat(.{n, 1}).create(0);
+        pub fn max(mat: *const This) Mat(n, 1) {
+            var out = Mat(n, 1).create(0);
             for (0..mat.rows()) |row| {
                 out.data[row][0] = max_row(mat.data[row]);
             }
@@ -136,8 +112,8 @@ pub fn Mat(comptime shape: [2]usize) type {
             return @reduce(.Add, row);
         }
 
-        pub fn sum(mat: *const This) Mat(.{n, 1}) {
-            var out = Mat(.{n, 1}).create(0);
+        pub fn sum(mat: *const This) Mat(n, 1) {
+            var out = Mat(n, 1).create(0);
             for (0..mat.rows()) |row| {
                 out.data[row][0] = sum_row(mat.data[row]);
             }
@@ -153,15 +129,15 @@ pub fn Mat(comptime shape: [2]usize) type {
         }
 
         pub fn exp(mat: *const This) This {
-            var out = Mat(shape).create(0);
+            var out = Mat(n, m).create(0);
             for (0..mat.rows()) |row| {
                 out.data[row] = exp_row(mat.data[row]);
             }
             return out;
         }
 
-        pub fn t(mat: *const This) Mat(.{m, n}) { // transpose
-            var out = Mat(.{m, n}).create(0);
+        pub fn t(mat: *const This) Mat(m, n) { // transpose
+            var out = Mat(m, n).create(0);
             for (0..mat.rows()) |row| {
                 for (0..mat.cols()) |col| {
                     out.set(col, row, mat.get(row, col));
@@ -200,15 +176,28 @@ pub fn Mat(comptime shape: [2]usize) type {
             return out;
         }
 
+        fn addIsDefined(comptime a_type: anytype, comptime b_type: anytype) union(enum) {none, full, per_row} {
+                if (a_type.n == b_type.n and a_type.m == b_type.m) return .full;
+                if (a_type.n == b_type.n and b_type.m == 1) return .per_row;
+                return .none;
+            }
+
+            test "test_isAddDefined" {
+                try std.testing.expect(addIsDefined(Mat(2, 4), Mat(2, 4)) == .full);
+                try std.testing.expect(addIsDefined(Mat(15, 25), Mat(15, 1)) == .per_row);
+                try std.testing.expect(addIsDefined(Mat(15, 25), Mat(15, 2)) == .none);
+                try std.testing.expect(addIsDefined(Mat(1, 2), Mat(3, 4)) == .none);
+            }
+
         fn dot(comptime l: usize, a: @Vector(l, f32), b: @Vector(l, f32)) f32 {
             return @reduce(.Add, a*b);
         }
 
-        pub fn mul(a: *const This, b: anytype) Mat(.{n, @TypeOf(b).m}) {
+        pub fn mul(a: *const This, b: anytype) Mat(n, @TypeOf(b).m) {
             if (!comptime isMatrix(@TypeOf(a.*)) or !isMatrix(@TypeOf(b))) @compileError("The 'matrix' you provided is not really a matrix");
             if (!comptime mulIsDefined(@TypeOf(a.*), @TypeOf(b))) @compileError("Your multipication is misaligned, B must have the same number of rows as A has columns!");
 
-            var out = Mat(.{n, @TypeOf(b).m}).create(0);
+            var out = Mat(n, @TypeOf(b).m).create(0);
             const b_t = b.t();
 
             for (0..n) |row| { 
@@ -221,9 +210,18 @@ pub fn Mat(comptime shape: [2]usize) type {
 
             return out;
         }
+
+        fn mulIsDefined(comptime a_type: anytype, comptime b_type: anytype) bool {
+            return a_type.m == b_type.n;
+        }
+
+        test "test_isMulDefined" {
+            try std.testing.expect(mulIsDefined(Mat(4, 2), Mat(2, 5)) == true);
+            try std.testing.expect(mulIsDefined(Mat(1, 2), Mat(3, 4)) == false);
+        }
                  
         pub fn relu(mat: *const This) This {
-            var out = Mat(shape).create(0);
+            var out = Mat(n, m).create(0);
 
             for (0..mat.rows()) |row| {
                 for (0..mat.cols()) |col| {
@@ -235,7 +233,7 @@ pub fn Mat(comptime shape: [2]usize) type {
         }
 
         pub fn sigmoid(mat: *const This) This {
-            var out = Mat(shape).create(0);
+            var out = Mat(n, m).create(0);
             for (0..mat.rows()) |row| {
                 for (0..mat.cols()) |col| {
                     out.set(row, col, 1 / (1 + @exp(-mat.get(row, col))));
@@ -275,10 +273,10 @@ pub fn Mat(comptime shape: [2]usize) type {
 const layer_kind = union(enum) {input, hidden, output};
 fn Layer(kind: layer_kind, activation: Activation, comptime len: usize, comptime parent_len: usize, batch_size: usize) type {
     return struct{
-        weights: Mat(.{len, parent_len}) = undefined,
-        z: Mat(.{len, batch_size}) = undefined,
-        a: Mat(.{len, batch_size}) = undefined,
-        bias: Mat(.{len, 1}) = undefined,
+        weights: Mat(len, parent_len) = undefined,
+        z: Mat(len, batch_size) = undefined,
+        a: Mat(len, batch_size) = undefined,
+        bias: Mat(len, 1) = undefined,
         activation: Activation = undefined,
         kind: layer_kind,
 
@@ -308,7 +306,7 @@ fn Layer(kind: layer_kind, activation: Activation, comptime len: usize, comptime
             self.weights.randomFill(prng.random());
         }
 
-        pub fn forward(self: *@This(), layer_input: Mat(.{parent_len, batch_size})) void {
+        pub fn forward(self: *@This(), layer_input: Mat(parent_len, batch_size)) void {
             if (self.kind == .input) @panic("Do not pass over the input layer. Complete all normalization and preprocessing prior to forward feed");
             self.z = self.weights.mul(layer_input).add(self.bias);
             self.a = a: switch (self.activation) {
@@ -465,10 +463,8 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
         //     print("\n", .{});
         // }
 
-        pub fn forward(self: *@This(), input: [batch_size][def[0][0]]f32) Mat(.{def[depth-1][0], batch_size}) {
-            var temp = Mat(.{batch_size, def[0][0]}).create(0);
-            temp.load(input);
-            self.layers[0].a = temp.t();
+        pub fn forward(self: *@This(), input: Mat(batch_size, def[0][0])) Mat(def[depth-1][0], batch_size) {
+            self.layers[0].a = input.t();
              inline for (1..depth) |i| {
                 // @compileLog(i);
                 var layer = &self.layers[i];

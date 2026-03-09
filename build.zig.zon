@@ -1,9 +1,9 @@
 .{
     .name = .zffnn,
     .version = "0.0.0",
-    .fingerprint = 0x1f3c3679b5d8381d, // Changing this has security and trust implications.
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
+    .fingerprint = 0x76231a48c9647169,
     .minimum_zig_version = "0.15.1",
     .paths = .{
         "build.zig",
