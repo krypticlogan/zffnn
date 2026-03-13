@@ -1,5 +1,6 @@
 //! By convention, root.zig is the root source file when making a library.
 const std = @import("std");
+const build_options = @import("build_options");
 const print = std.debug.print;
 
 pub const Activation = union(enum(u8)) {
@@ -393,14 +394,14 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
         /// Pass the directory to your pretrained weights and biases and import them to the model here
         /// - Files should be labeled as "w1.bin, b1.bin, w2.bin, ... and so on"
         /// Weights and biases begin at 1 because the 'zeroth' layer is the input layer and does not possess weights or biases
-        pub fn load_from_bin(comptime param_directory_path: []const u8) This {
+        pub fn load_from_bin() This {
             var self: This = new();
             const MAX_USIZE_DIGITS = 20;
             for (1..def.len) |i| {
                 comptime var layer_str_buf: [MAX_USIZE_DIGITS]u8 = undefined;
                 const layer_str = std.fmt.bufPrint(&layer_str_buf, "{d}", .{i}) catch unreachable;
-                const w= std.mem.bytesAsSlice(f32, @embedFile(param_directory_path ++ "/w" ++ layer_str ++ ".bin"));
-                const b= std.mem.bytesAsSlice(f32, @embedFile(param_directory_path ++ "/b" ++ layer_str ++ ".bin"));
+                const w= std.mem.bytesAsSlice(f32, @embedFile(build_options.params ++ "/w" ++ layer_str ++ ".bin"));
+                const b= std.mem.bytesAsSlice(f32, @embedFile(build_options.params ++ "/b" ++ layer_str ++ ".bin"));
 
                 // downcast to f16 for storage
                 // var w_f16: [w.len]f16 = undefined;
