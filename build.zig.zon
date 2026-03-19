@@ -6,9 +6,9 @@
     .fingerprint = 0x76231a48c9647169,
     .minimum_zig_version = "0.15.1",
     .paths = .{
-        "zffn/build.zig",
-        "zffn/build.zig.zon",
-        "zffn/src",
-        "zffnn/model_loader.zig",
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "model_loader.zig",
     },
 }
