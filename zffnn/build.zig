@@ -11,7 +11,6 @@ pub fn build(b: *std.Build) void {
         .optimize= optimize
     });
     mod.addOptions("build_options", options);
-
     const mod_tests = b.addTest(.{
         .root_module = mod,
     });

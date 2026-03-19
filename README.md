@@ -1,20 +1,30 @@
-# Zig FFNN
+# ZFFNN — Compile-Time Feedforward Neural Networks in Zig
 
-## How to build and use
-Download and save zffnn as a dependency of the project
-```
+ZFFNN is a statically-defined feedforward neural network library built using Zig's comptime system.
+
+Networks are fully constructed at compile time, with:
+- compile-time shape validation
+- zero heap allocation
+- static memory layout
+- deterministic binaries
+
+This library is primarily designed for **inference on pretrained models**, particularly in constrained or embedded environments. 
+
+---
+
+## Installation
+
+```bash
 zig fetch --save git+https://github.com/krypticlogan/zffnn
 ```
-
-In your build.zig file, load the module as a dependency.
+Add to your build.zig:
 ```zig
 const nn_dep = b.dependency("zffnn", .{
-        .target = target,
-        .optimize = optimize,
-    });
+    .target = target,
+    .optimize = optimize,
+});
 const zffnn = nn_dep.module("zffnn");
 ```
-
 Then later on, when creating your target, add the module as an import.
 ```zig
 const exe = b.addExecutable(.{
@@ -26,80 +36,250 @@ const exe = b.addExecutable(.{
         .imports = &.{
             .{ .name = "zffnn", .module = zffnn }, // import the module here
         },
-        .link_libc = true,
+
     }),
 });
 ```
-
-## User-defined NN Example for pretrained weights
+Then import the module in your src exe:
 ```zig
 const zf = @import("zffnn");
+```
+
+### Defining a Network
+
+Networks are defined at compile time using a shape + activation specification:
+```zig
 const Activation = zf.Activation;
 const NN = zf.NN;
 
-const definition: []const struct { usize, Activation } = &.{ 
-    .{feature_ct, .none}, 
-    .{10, .relu}, 
-    .{15, .sigmoid}, 
-    .{2, .softmax}
+const definition: []const struct { usize, Activation } = &.{
+    .{784, .none},     // input layer (no activation)
+    .{128, .relu},     // hidden
+    .{10, .softmax},   // output
 };
+
 const Net = NN(definition, batch_size);
-var nn = comptime Net.load_from_bin(path_to_binaries);
-
-const preds = nn.forward(input); // for inference # everything prior to this is comptime
-preds.show();
 ```
-## Description
-ZFFNN is a statically defined feedforward neural network engine.
+# Usage
+For inference on a pretrained model, either provide the lib with a path to your network weights and biases to the lib via build.zig, or load them yourself and pass them to the model.
 
-Instead of creating networks dynamically at runtime like most ML libs, this project uses Zig comptime to create a user-defined network at compile time. This enables:
-- Compile-time dimension validation
+## Constraints
 
-- Zero heap allocations
+```definition.len``` >= 2
 
-- Fully static memory layout
+First layer must use ```.none ``` activation
 
-- Deterministic binaries
+Each layer defines:
 
-Matrices and network internals are resolved to shape-encoded types and verified for dimensional correctness at compile time.
+- number of nodes
 
-Matrices are stored row-major and use Zig's @Vector type internally to facilitate SIMD operations where applicable.
+- activation function
 
-*Poorly defined models (shape mismatch, incorrect use of activations/ops, etc.) will never compile.*
+Supported activations:
 
-## Philosophy
-Unlike PyTorch or TensorFlow, which prioritize being dynamic and flexibile, sometimes a static and predictable system is preferred. 
+- ```.relu```
 
-This engine embraces the static and predictable architecture, where the model is entirely stable at runtime. Changing the network's definition requires recompilation, allowing for the compiler to verify correctness before execution.
+- ```.sigmoid```
 
-This lib is not a replacement for those libraries mentioned previously, but by omitting dynamic control and runtime allocation we gain determinism and simplicity, and retain.
-With this, it excels at creating tiny binaries for pretrained, deterministic neural networks and excel in speed through compile time optimizations.
+- ```.softmax```
 
-While training will be supported, the natural use case is for inference on pretrained models in a constrained environment.
+## Shape Conventions
 
-The network itself compiles to a static binary for any user-defined network, so it is well suited for microcontrollers, single-board computers, and other environments where space and predictability are imperative.
+This library uses column-major activations internally and batch-major inputs externally.
 
-To load a model you trained in PyTorch, load binaries for the weights and biases and they'll be built into the network.
-.
-## Features:
-- Dense NN of arbitrary size built at compile time
-- Static memory (zero heap allocations)
-- Inference through forward pass
-- SIMD via Zig @Vector 
-- All operations on data (matmul, add, sub, etc.) are checked at compile to ensure they are well defined.
-- Training via Stochastic Gradient Descent (coming soon)
+This makes mathematical operations easier for the engine, but allows users to keep 'normal' representation of the data.
 
-- Currently supported activations are:
-    - ReLU (Leaky ReLU to be added)
-    - Sigmoid
-    - Softmax
-- Loss functions may be extended, but must be well defined for the shape, and will be checked at compile time.
+### Input
+```zig 
+Mat(batch_size, input_size)
+```
+Where:
 
-## Future work:
-- Backprop and training support
-- Builtin loss functions
-- Sparse layer support
-- More activation functions
-- Greater SIMD optimization
-- Stripped inference-only build (smaller binaries)
+One row = one sample
+One column = one feature
+
+### Internal Representation
+
+All internal activations are stored as:
+
+```zig
+Mat(layer_size, batch_size)
+```
+So the input is transposed on entry.
+
+### Output
+```zig
+Mat(output_size, batch_size)
+```
+### Forward Pass
+```zig
+var nn = Net.new();
+const output = nn.forward(input);
+```
+
+Input must match: *(batch_size, input_size)*
+
+Output shape is: *(output_size, batch_size)*
+
+## Parameter Loading (Pretrained Models)
+
+ZFFNN supports compile-time embedding of weights and biases.
+
+### File Format
+
+Each layer (starting from 1) must have, so excluding layer 0 (input layer):
+```
+w1.bin, b1.bin
+w2.bin, b2.bin
+...
+```
+Where:
+w{i}.bin = flattened row-major weights
+b{i}.bin = flattened biases
+
+### Shape Requirements
+
+For layer *i*:
+
+Weights: (layer_size, prev_layer_size)
+
+Bias: (layer_size, 1)
+
+**If shapes do not match, compilation fails.**
+
+### Loading
+
+Set the parameter directory via build options, then:
+
+```zig
+var nn = comptime Net.load_from_bin();
+```
+All parameters are embedded into the binary via ```@embedFile```.
+
+## Matrix API
+
+### Core matrix type: ```Mat(rows, cols)```
+
+#### Operations
+
+```add```, ```sub```
+
+full match OR per-row broadcast *(n, m) + (n, 1)*
+
+```mul```
+
+standard matrix multiplication
+
+```t()```
+
+transpose
+
+```exp```, ```sum```, ```max```
+
+activations:
+
+```relu()```
+
+```sigmoid()```
+
+```softmax()``` (numerically stabilized)
+
+All operations are:
+
+- shape-checked at compile time
+
+- allocation-free
+
+### Memory Model
+- No heap allocation
+
+- All tensors are stack or static
+
+- Network structure is part of the type
+
+### Compiled binary contains:
+
+- model weights
+
+- full network layout
+
+## What This Library Is (and Isn’t)
+### Designed For
+
+- Pretrained inference
+
+- Embedded systems
+
+- Deterministic execution
+
+- Small binary deployments
+
+### *Not* Designed For
+
+- Dynamic model construction
+
+- Runtime shape changes
+
+- GPU acceleration
+
+- Large-scale training workloads
+
+### Key Differences from PyTorch / TensorFlow
+
+| Feature | ZFFNN | PyTorch / TF |
+|----|----|----|
+Graph construction | Compile-time | Runtime
+Memory | Static	| Dynamic
+Shape errors | Compile-time	| Runtime
+Model loading | Embedded in binary | Runtime IO
+Flexibility	| Low | High
+Determinism | Built-in | Varies
+
+### Limitations
+
+- Dense layers only
+
+- No backpropagation (planned)
+
+- No loss functions (planned)
+
+- Limited activation set
+
+- Compile times increase with model size
+
+- No hardware-specific kernel optimization (yet)
+
+### Roadmap
+
+- Backpropagation + training
+
+- Additional activations
+
+- Loss functions
+
+- Sparse layers
+
+- SIMD improvements
+
+- Optional inference-only stripped builds
+
+### Summary
+
+ZFFNN treats neural networks as compile-time constructs, not runtime objects.
+
+This enables:
+
+- stronger guarantees
+
+- simpler execution model
+
+- predictable performance
+
+- minimal runtime overhead
+
+At the cost of:
+
+- flexibility
+
+- compile-time complexity
 

@@ -1,6 +1,5 @@
 //! By convention, root.zig is the root source file when making a library.
 const std = @import("std");
-const build_options = @import("build_options");
 const print = std.debug.print;
 
 pub const Activation = union(enum(u8)) {
@@ -394,30 +393,15 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
         /// Pass the directory to your pretrained weights and biases and import them to the model here
         /// - Files should be labeled as "w1.bin, b1.bin, w2.bin, ... and so on"
         /// Weights and biases begin at 1 because the 'zeroth' layer is the input layer and does not possess weights or biases
-        pub fn load_from_bin() This {
-            var self: This = new();
-            const MAX_USIZE_DIGITS = 20;
-            for (1..def.len) |i| {
-                comptime var layer_str_buf: [MAX_USIZE_DIGITS]u8 = undefined;
-                const layer_str = std.fmt.bufPrint(&layer_str_buf, "{d}", .{i}) catch unreachable;
-                const w= std.mem.bytesAsSlice(f32, @embedFile(build_options.params ++ "/w" ++ layer_str ++ ".bin"));
-                const b= std.mem.bytesAsSlice(f32, @embedFile(build_options.params ++ "/b" ++ layer_str ++ ".bin"));
+        pub fn load_from_embeds() This {
+            const embeds = @import("zffnn_embeds");
 
-                // downcast to f16 for storage
-                // var w_f16: [w.len]f16 = undefined;
-                // var b_f16: [b.len]f16 = undefined;
-                // inline for (w, 0..) |val, j| {
-                //     w_f16[j] = @floatCast(val);
-                // }
-                // inline for (b, 0..) |val, j| {
-                //     b_f16[j] = @floatCast(val);
-                // }
-                
+            var self: This = new();
+            for (1..def.len) |i| {
+                const w= std.mem.bytesAsSlice(f32, embeds.weights[i - 1]);
+                const b= std.mem.bytesAsSlice(f32, embeds.biases[i - 1]);
+                // TODO: downcast to f16 for storage
                 self.layer_from_bin(i, w, b);
-                // @compileLog(bin.len);
-                // @compileLog(bin[0]);
-                // @compileLog(bin[1]);
-                // @compileLog(bin[2]);
             }
             return self;
         }
