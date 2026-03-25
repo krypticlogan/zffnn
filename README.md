@@ -40,7 +40,7 @@ const exe = b.addExecutable(.{
     }),
 });
 ```
-Then import the module in your src exe:
+Lastly, import the module in your src exe:
 ```zig
 const zf = @import("zffnn");
 ```
@@ -120,7 +120,17 @@ pub fn addEmbeddedParams(
 }
 ```
 
-Then, inside your exe, you can call
+Use this inside your build.zig file as so after creating your dependency module.
+```zig
+addEmbeddedParams(
+    build, 
+    zffnn_mod, 
+    b.path("model_params"), 
+    trainable_layer_ct
+);
+```
+
+Inside your exe, you can call:
 ```zig
 var nn = comptime Net.load_from_embeds();
 ```
