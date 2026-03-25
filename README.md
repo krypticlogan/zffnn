@@ -61,7 +61,70 @@ const definition: []const struct { usize, Activation } = &.{
 const Net = NN(definition, batch_size);
 ```
 # Usage
-For inference on a pretrained model, either provide the lib with a path to your network weights and biases to the lib via build.zig, or load them yourself and pass them to the model.
+## Minimal Flow for inference using pretrained weights
+```zig
+const zf = @import("zffnn");
+const Activation = zf.Activation;
+const NN = zf.NN;
+
+const definition: []const struct { usize, Activation } = &.{ 
+    .{feature_ct, .none}, 
+    .{10, .relu}, 
+    .{15, .sigmoid}, 
+    .{2, .softmax}
+};
+const Net = NN(definition, batch_size);
+var nn = comptime Net.load_from_embeds(); // this line requires setup in build.zig 
+
+const preds = nn.forward(input); // inference (everything prior to this is comptime)
+preds.show();
+```
+### Embedding Parameters
+Using weights and biases binaries within the library requires some setup.
+
+Parameters must be embedded at compile time to ensure validity and static inference, so this helper is provided to facilitate passing binaries from a directory to your model.
+```zig
+pub fn addEmbeddedParams(
+    b: *std.Build,
+    target_mod: *std.Build.Module,
+    /// - The files should be named 'w{layer_index}.bin' and 'b{layer_index}.bin' for each layer.
+    dir: std.Build.LazyPath,
+    /// Number of trainable layers.
+    layer_count: usize,
+) void {
+    const wf = b.addWriteFiles();
+
+    var zig_src: std.ArrayList(u8) = .empty;
+    defer zig_src.deinit(b.allocator);
+    
+    zig_src.writer(b.allocator).writeAll("pub const weights = [_][]const u8{\n") catch unreachable;
+    for (1..layer_count + 1) |i| {
+        const w_src = dir.path(b, b.fmt("w{d}.bin", .{i}));
+        _ = wf.addCopyFile(w_src, b.fmt("w{d}.bin", .{i}));
+        zig_src.writer(b.allocator).print("    @embedFile(\"w{d}.bin\"),\n", .{i}) catch unreachable;
+    }
+    zig_src.writer(b.allocator).writeAll("};\n\n") catch unreachable;
+
+    zig_src.writer(b.allocator).writeAll("pub const biases = [_][]const u8{\n") catch unreachable;
+    for (1..layer_count + 1) |i| {
+        const b_src = dir.path(b, b.fmt("b{d}.bin", .{i}));
+        _ = wf.addCopyFile(b_src, b.fmt("b{d}.bin", .{i}));
+        zig_src.writer(b.allocator).print("    @embedFile(\"b{d}.bin\"),\n", .{i}) catch unreachable;
+    }
+    zig_src.writer(b.allocator).writeAll("};\n") catch unreachable;
+
+    const embeds = wf.add("zffnn_embeds.zig", zig_src.items);
+    target_mod.addAnonymousImport("embed_params", .{
+        .root_source_file = embeds,
+    });
+}
+```
+
+Then, inside your exe, you can call
+```zig
+var nn = comptime Net.load_from_embeds();
+```
+as shown before, and there goes your model, ready to recieve input.
 
 ## Constraints
 

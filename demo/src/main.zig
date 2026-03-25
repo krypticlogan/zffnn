@@ -17,19 +17,20 @@ const Net = zffnn.NN(def, input_ct);
 
 pub fn main() void {
     // load our predefined model here under comptime scope
-    var nn = comptime Net.load_from_bin("model_params");
+    var nn = comptime Net.load_from_embeds();
 
-    const canvasSZ = 784; // drawing area
-    const dashWidth = 350;
-    const dashHeight = canvasSZ;
+    const screenWidth = 1000;
+    const screenHeight = 600;
+
+    const canvasSZ = @divFloor(screenWidth * 2, 3); // drawing area
+    const res = 28; // resolution 28x28
+    const cell_size = canvasSZ / res;
+
+    const dashWidth = screenWidth - canvasSZ + cell_size; // area for predictions and info
+    const dashHeight = screenHeight;
 
     const predictionBarWidth: u16 = @divFloor(dashWidth * 6, 10);
     const predictionBarHeight = 20; 
-
-    const screenWidth = canvasSZ + dashWidth;
-    const screenHeight = canvasSZ;
-    const res = 28; // resolution 28x28
-    const cell_size = canvasSZ / res;
 
     rl.initWindow(screenWidth, screenHeight, "zig nn demo");
     defer rl.closeWindow();
@@ -39,8 +40,8 @@ pub fn main() void {
     for (0..res) |y| {
         @memset(&canvas[y], 0.0);
     }
-    var model_input: [784]f32 = .{0} ** 784;
-    var model_preds = Mat(.{10, 1}).create(0);
+    var model_input = Mat(1, input_sz).create(0);
+    var model_preds = Mat(10, 1).create(0);
 
     rl.setTargetFPS(120); 
     while (!rl.windowShouldClose()) {
@@ -49,12 +50,12 @@ pub fn main() void {
             for (0..res) |y| { // clear canvas
                 @memset(&canvas[y], 0.0);
                 // model_preds.clear()
-                model_preds = Mat(.{10, 1}).create(0);
+                model_preds = Mat(10, 1).create(0);
             }
         }
 
         const mouse_pos = rl.getMousePosition();
-        if ((mouse_pos.x > 0 and mouse_pos.y > 0) and (mouse_pos.x < canvasSZ and mouse_pos.y < canvasSZ)) {
+        if ((mouse_pos.x > 0 and mouse_pos.y > 0) and (mouse_pos.x < canvasSZ - cell_size and mouse_pos.y < canvasSZ - cell_size)) {
             const cell_x: u8 = @intFromFloat(@divFloor(mouse_pos.x, cell_size));
             const cell_y: u8 = @intFromFloat(@divFloor(mouse_pos.y, cell_size));
             if (rl.isMouseButtonDown(.left)) {
@@ -67,8 +68,8 @@ pub fn main() void {
 
                 // make a prediction using the model on what number was drawn
                 const model_input_ptr: *[input_sz]f32 = @ptrCast(&canvas);
-                model_input = model_input_ptr.*;
-                model_preds = nn.forward(.{model_input});
+                model_input.load(.{model_input_ptr.*});
+                model_preds = nn.forward(model_input);
                 model_preds.show(); // debug
                 
                 const preds_row = model_preds.t(); // this needs to become reduce(.max, axis=.c)
@@ -101,16 +102,16 @@ pub fn main() void {
                 rl.drawRectangle(@intCast(x * cell_size), @intCast(y * cell_size) , cell_size, cell_size, color);
             }
         }
-        const dashStartX = cell_size * res;
+        const dashStartX = canvasSZ - cell_size;
         rl.drawRectangle(dashStartX, 0, dashWidth, dashHeight, .dark_brown);
         
-        const predictionBarsTop = 50;
+        const predictionBarsTop = 25;
         const predictionBarX = dashStartX + 50;
         var dig_buf: [2]u8 = undefined;
         const certainty_fmt = "{d:0>5.2}%";
         var certainty_buf: [6]u8 = undefined; // may be up to 5 chars long, plus the null termination
         for (0..10) |guess| { // prediction bars
-            const predictionBarY: u16 = predictionBarsTop + (predictionBarHeight + 50) * @as(u16, @intCast(guess));
+            const predictionBarY: u16 = predictionBarsTop + (predictionBarHeight + 25) * @as(u16, @intCast(guess));
             rl.drawRectangleRounded(
                 rl.Rectangle{.height = predictionBarHeight + 5, .width = predictionBarWidth, .x = predictionBarX, .y = @floatFromInt(predictionBarY) },
                 0.8, 3, .dark_gray

@@ -394,7 +394,7 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
         /// - Files should be labeled as "w1.bin, b1.bin, w2.bin, ... and so on"
         /// Weights and biases begin at 1 because the 'zeroth' layer is the input layer and does not possess weights or biases
         pub fn load_from_embeds() This {
-            const embeds = @import("zffnn_embeds");
+            const embeds = @import("embed_params");
 
             var self: This = new();
             for (1..def.len) |i| {

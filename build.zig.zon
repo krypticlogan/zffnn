@@ -9,6 +9,5 @@
         "build.zig",
         "build.zig.zon",
         "src",
-        "model_loader.zig",
     },
 }
