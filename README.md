@@ -194,41 +194,6 @@ Input must match: *(batch_size, input_size)*
 
 Output shape is: *(output_size, batch_size)*
 
-## Parameter Loading (Pretrained Models)
-
-ZFFNN supports compile-time embedding of weights and biases.
-
-### File Format
-
-Each layer (starting from 1) must have, so excluding layer 0 (input layer):
-```
-w1.bin, b1.bin
-w2.bin, b2.bin
-...
-```
-Where:
-w{i}.bin = flattened row-major weights
-b{i}.bin = flattened biases
-
-### Shape Requirements
-
-For layer *i*:
-
-Weights: (layer_size, prev_layer_size)
-
-Bias: (layer_size, 1)
-
-**If shapes do not match, compilation fails.**
-
-### Loading
-
-Set the parameter directory via build options, then:
-
-```zig
-var nn = comptime Net.load_from_bin();
-```
-All parameters are embedded into the binary via ```@embedFile```.
-
 ## Matrix API
 
 ### Core matrix type: ```Mat(rows, cols)```
@@ -355,4 +320,3 @@ At the cost of:
 - flexibility
 
 - compile-time complexity
-
