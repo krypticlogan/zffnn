@@ -8,13 +8,13 @@
             .url = "git+https://github.com/raylib-zig/raylib-zig?ref=devel#cd71c85d571027ac8033357f83b124ee051825b3",
             .hash = "raylib_zig-5.6.0-dev-KE8REENOBQC-m5nK7M2b5aKSIubJPbPLUYcRhT7aT3RN",
         },
-        // .zffnn = .{
-        //     .url = "git+https://github.com/krypticlogan/zffnn#b4e5f3d4efab9156887955a3c47042da7e82e3aa",
-        //     .hash = "zffnn-0.0.0-aXFkydxOAAAblBY5j-SaPeyozIkDWtQavkD6ziy2OtZx",
-        // },
         .zffnn = .{
-            .path = "../",
+            .url = "git+https://github.com/krypticlogan/zffnn#fb05270b8fea30dc438ad0a62774ccce0d22cf2f",
+            .hash = "zffnn-0.0.1-aXFkydJZAABWrBSw9_1xTFlzGCT7069tZdKFq34bi2Kt",
         },
+        // .zffnn = .{
+        //     .path = "../"
+        // },
     },
     .paths = .{
         "build.zig",

@@ -1,6 +1,7 @@
 # ZFFNN — Compile-Time Feedforward Neural Networks in Zig
 
-ZFFNN is a statically-defined feedforward neural network library built using Zig's comptime system.
+A statically-defined feedforward neural network library built using Zig's comptime system.
+---
 
 Networks are fully constructed at compile time, with:
 - compile-time shape validation
@@ -9,6 +10,8 @@ Networks are fully constructed at compile time, with:
 - deterministic binaries
 
 This library is primarily designed for **inference on pretrained models**, particularly in constrained or embedded environments. 
+
+A demo is provided for example usage.
 
 ---
 
@@ -73,7 +76,7 @@ const definition: []const struct { usize, Activation } = &.{
     .{15, .sigmoid}, 
     .{2, .softmax}
 };
-const Net = NN(definition, batch_size);
+const Net = NN(definition, batch_size); // Generated NN type
 var nn = comptime Net.load_from_embeds(); // this line requires setup in build.zig 
 
 const preds = nn.forward(input); // inference (everything prior to this is comptime)
@@ -82,52 +85,28 @@ preds.show();
 ### Embedding Parameters
 Using weights and biases binaries within the library requires some setup.
 
-Parameters must be embedded at compile time to ensure validity and static inference, so this helper is provided to facilitate passing binaries from a directory to your model.
+Parameters must be embedded at compile time to ensure validity and static inference, so a helper artifact is provided to facilitate passing binaries from a local directory to the model.
 ```zig
-pub fn addEmbeddedParams(
-    b: *std.Build,
-    target_mod: *std.Build.Module,
-    /// - The files should be named 'w{layer_index}.bin' and 'b{layer_index}.bin' for each layer.
-    dir: std.Build.LazyPath,
-    /// Number of trainable layers.
-    layer_count: usize,
-) void {
-    const wf = b.addWriteFiles();
-
-    var zig_src: std.ArrayList(u8) = .empty;
-    defer zig_src.deinit(b.allocator);
+{ // Run the embed helper to generate the embeds.zig file
+    const params_dir = b.path("model_params");
+    const embed_file_name = "embeds.zig";
     
-    zig_src.writer(b.allocator).writeAll("pub const weights = [_][]const u8{\n") catch unreachable;
-    for (1..layer_count + 1) |i| {
-        const w_src = dir.path(b, b.fmt("w{d}.bin", .{i}));
-        _ = wf.addCopyFile(w_src, b.fmt("w{d}.bin", .{i}));
-        zig_src.writer(b.allocator).print("    @embedFile(\"w{d}.bin\"),\n", .{i}) catch unreachable;
-    }
-    zig_src.writer(b.allocator).writeAll("};\n\n") catch unreachable;
+    const zffn_embed_gen = nn_dep.artifact("embed_helper");
+    const run_gen = b.addRunArtifact(zffn_embed_gen);
+    run_gen.addArg("3"); // number of trainable layers (all but the input), 3 here
+    run_gen.addArg(embed_file_name);
+    run_gen.addDirectoryArg(params_dir); // directory containing model parameters
+    
+    const out_dir = run_gen.addOutputDirectoryArg("zffnn_embeds"); // output directory for the generated embeds.zig file
 
-    zig_src.writer(b.allocator).writeAll("pub const biases = [_][]const u8{\n") catch unreachable;
-    for (1..layer_count + 1) |i| {
-        const b_src = dir.path(b, b.fmt("b{d}.bin", .{i}));
-        _ = wf.addCopyFile(b_src, b.fmt("b{d}.bin", .{i}));
-        zig_src.writer(b.allocator).print("    @embedFile(\"b{d}.bin\"),\n", .{i}) catch unreachable;
-    }
-    zig_src.writer(b.allocator).writeAll("};\n") catch unreachable;
-
-    const embeds = wf.add("zffnn_embeds.zig", zig_src.items);
-    target_mod.addAnonymousImport("embed_params", .{
-        .root_source_file = embeds,
+    const embed_mod = b.createModule(.{
+        .root_source_file = out_dir.path(b, embed_file_name),
+        .target = target,
+        .optimize = optimize,
     });
+    // add the embed module to the zffnn import, the name "embed_params" must be used
+    zffnn.addImport("embed_params", embed_mod);
 }
-```
-
-Use this inside your build.zig file as so after creating your dependency module.
-```zig
-addEmbeddedParams(
-    build, 
-    zffnn_mod, 
-    b.path("model_params"), 
-    trainable_layer_ct
-);
 ```
 
 Inside your exe, you can call:
@@ -200,27 +179,15 @@ Output shape is: *(output_size, batch_size)*
 
 #### Operations
 
-```add```, ```sub```
+```add```, ```sub``` full match OR per-row broadcast *(n, m) + (n, 1)*
 
-full match OR per-row broadcast *(n, m) + (n, 1)*
+```mul``` standard matrix multiplication
 
-```mul```
+```t()``` transpose
 
-standard matrix multiplication
+```exp```, ```sum```, ```max``` per row ops 
 
-```t()```
-
-transpose
-
-```exp```, ```sum```, ```max```
-
-activations:
-
-```relu()```
-
-```sigmoid()```
-
-```softmax()``` (numerically stabilized)
+```relu()```, ```sigmoid()```, ```softmax()``` activations
 
 All operations are:
 
@@ -251,6 +218,11 @@ All operations are:
 - Deterministic execution
 
 - Small binary deployments
+
+i.e
+- Embedded deterministic NPC logic in games
+- Inference on embedded systems (Raspberry Pi with sensors)
+- Any constrained environment where determinism and memory are paramount.
 
 ### *Not* Designed For
 

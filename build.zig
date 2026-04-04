@@ -4,12 +4,12 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
     // library
-    const mod = b.addModule("zffnn", .{ 
-        .root_source_file = b.path("src/root.zig"), 
+    const mod = b.addModule("zffnn", .{
+        .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
-    
+
     // embed params generator
     const gen = b.addExecutable(.{
         .name = "embed_helper",
