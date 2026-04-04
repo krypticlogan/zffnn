@@ -8,7 +8,7 @@ const print = std.debug.print;
 const input_ct = 1;
 const input_sz = 784;
 const def: []const struct { usize, zffnn.Activation } = &.{
-    .{ input_sz, .relu },
+    .{ input_sz, .none },
     .{ 128, .relu },
     .{ 64, .relu },
     .{ 10, .softmax },
