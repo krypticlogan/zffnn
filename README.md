@@ -1,7 +1,6 @@
 # ZFFNN — Compile-Time Feedforward Neural Networks in Zig
 
 A statically-defined feedforward neural network library built using Zig's comptime system.
----
 
 Networks are fully constructed at compile time, with:
 - compile-time shape validation
