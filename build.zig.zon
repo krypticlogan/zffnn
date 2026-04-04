@@ -1,6 +1,6 @@
 .{
     .name = .zffnn,
-    .version = "0.0.0",
+    .version = "0.0.1",
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
     .fingerprint = 0x76231a48c9647169,
@@ -9,5 +9,6 @@
         "build.zig",
         "build.zig.zon",
         "src",
+        "embed_helper"
     },
 }
