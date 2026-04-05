@@ -1,7 +1,7 @@
 const std = @import("std");
 const print = std.debug.print;
 
-pub fn isMatrix(comptime maybe_mat_type: anytype) bool {
+pub fn is_matrix(comptime maybe_mat_type: anytype) bool {
     // @compileLog(maybe_mat_type);
     const fields = std.meta.fields(maybe_mat_type);
     // todo : gate on comptime n and m too
@@ -11,10 +11,10 @@ pub fn isMatrix(comptime maybe_mat_type: anytype) bool {
 test "test_isMatrix" {
     var test_mat = Mat(2, 4).create(0);
     const test_mat_ptr = &test_mat;
-    try std.testing.expect(isMatrix(Mat(3, 4)) == true);
-    try std.testing.expect(isMatrix(@TypeOf(test_mat)) == true);
-    try std.testing.expect(isMatrix(@TypeOf(test_mat_ptr.*)) == true);
-    try std.testing.expect(isMatrix(struct { not_data: f32 }) == false);
+    try std.testing.expect(is_matrix(Mat(3, 4)) == true);
+    try std.testing.expect(is_matrix(@TypeOf(test_mat)) == true);
+    try std.testing.expect(is_matrix(@TypeOf(test_mat_ptr.*)) == true);
+    try std.testing.expect(is_matrix(struct { not_data: f32 }) == false);
 }
 
 pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
@@ -29,13 +29,19 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         pub fn init(mat: *This, fill_with: f32) void {
             mat.fill(fill_with);
         }
-
+        
         pub fn create(fill_with: f32) This {
             var mat: Mat(n, m) = undefined;
             mat.fill(fill_with);
             return mat;
         }
         
+        pub fn createRandom(prng: *std.Random.Xoshiro256) This {
+            var mat: Mat(n, m) = undefined;
+            mat.random_fill(prng.random());
+            return mat;
+        }
+
         pub fn dupe_like(_: This) This {
             return This.create(0);
         }
@@ -63,7 +69,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         pub inline fn cols(_: This) usize {
             return m;
         }
-        
+
         pub inline fn set(self: *This, row: usize, col: usize, val: f32) void {
             self.data[row][col] = val;
         }
@@ -72,11 +78,11 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return self.data[row][col];
         }
 
-        pub fn randomFill(mat: *This, rand: std.Random) void {
+        pub fn random_fill(mat: *This, rand: std.Random) void {
             for (&mat.data) |*row| {
                 var i: usize = 0;
                 while (i < m) : (i += 1) {
-                    row[i] = randomNormalizedFloat(rand);
+                    row[i] = random_normalized_float(rand);
                 }
             }
         }
@@ -145,7 +151,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         // todo : inplace variants
         pub fn add(a: *const This, b: anytype) This {
             var out = This.create(0);
-            switch (comptime addIsDefined(@TypeOf(a.*), @TypeOf(b))) {
+            switch (comptime add_is_defined(@TypeOf(a.*), @TypeOf(b))) {
                 .full => for (0..out.rows()) |row| { // simd per row due to vector type
                     out.data[row] = a.data[row] + b.data[row];
                 },
@@ -160,7 +166,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
 
         pub fn sub(a: *const This, b: anytype) This {
             var out = This.create(0);
-            switch (comptime addIsDefined(@TypeOf(a.*), @TypeOf(b))) {
+            switch (comptime add_is_defined(@TypeOf(a.*), @TypeOf(b))) {
                 .full => for (0..out.rows()) |row| { // simd per row due to vector type
                     out.data[row] = a.data[row] - b.data[row];
                 },
@@ -173,17 +179,17 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return out;
         }
 
-        fn addIsDefined(comptime a_type: anytype, comptime b_type: anytype) union(enum) { none, full, per_row } {
+        fn add_is_defined(comptime a_type: anytype, comptime b_type: anytype) union(enum) { none, full, per_row } {
             if (a_type.n == b_type.n and a_type.m == b_type.m) return .full;
             if (a_type.n == b_type.n and b_type.m == 1) return .per_row;
             return .none;
         }
 
         test "addIsDefined" {
-            try std.testing.expect(addIsDefined(Mat(2, 4), Mat(2, 4)) == .full);
-            try std.testing.expect(addIsDefined(Mat(15, 25), Mat(15, 1)) == .per_row);
-            try std.testing.expect(addIsDefined(Mat(15, 25), Mat(15, 2)) == .none);
-            try std.testing.expect(addIsDefined(Mat(1, 2), Mat(3, 4)) == .none);
+            try std.testing.expect(add_is_defined(Mat(2, 4), Mat(2, 4)) == .full);
+            try std.testing.expect(add_is_defined(Mat(15, 25), Mat(15, 1)) == .per_row);
+            try std.testing.expect(add_is_defined(Mat(15, 25), Mat(15, 2)) == .none);
+            try std.testing.expect(add_is_defined(Mat(1, 2), Mat(3, 4)) == .none);
         }
 
         fn dot(comptime l: usize, a: @Vector(l, f32), b: @Vector(l, f32)) f32 {
@@ -191,8 +197,8 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         }
 
         pub fn mul(a: *const This, b: anytype) Mat(n, @TypeOf(b).m) {
-            if (!comptime isMatrix(@TypeOf(a.*)) or !isMatrix(@TypeOf(b))) @compileError("The 'matrix' you provided is not really a matrix");
-            if (!comptime mulIsDefined(@TypeOf(a.*), @TypeOf(b))) @compileError("Your multipication is misaligned, B must have the same number of rows as A has columns!");
+            if (!comptime is_matrix(@TypeOf(a.*)) or !is_matrix(@TypeOf(b))) @compileError("The 'matrix' you provided is not really a matrix");
+            if (!comptime mul_is_defined(@TypeOf(a.*), @TypeOf(b))) @compileError("Your multipication is misaligned, B must have the same number of rows as A has columns!");
 
             var out = Mat(n, @TypeOf(b).m).create(0);
             const b_t = b.t();
@@ -208,16 +214,16 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return out;
         }
 
-        fn mulIsDefined(comptime a_type: anytype, comptime b_type: anytype) bool {
+        fn mul_is_defined(comptime a_type: anytype, comptime b_type: anytype) bool {
             return a_type.m == b_type.n;
         }
 
         test "mulIsDefined" {
-            try std.testing.expect(mulIsDefined(Mat(4, 2), Mat(2, 5)) == true);
-            try std.testing.expect(mulIsDefined(Mat(1, 2), Mat(3, 4)) == false);
+            try std.testing.expect(mul_is_defined(Mat(4, 2), Mat(2, 5)) == true);
+            try std.testing.expect(mul_is_defined(Mat(1, 2), Mat(3, 4)) == false);
         }
-        
-        fn randomNormalizedFloat(rand: std.Random) f32 {
+
+        fn random_normalized_float(rand: std.Random) f32 {
             const rand_float = rand.float(f32);
             return 2 * rand_float - 1;
         }
