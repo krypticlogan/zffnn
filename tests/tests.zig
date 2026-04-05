@@ -7,7 +7,7 @@ test {
 pub fn mat_equal(a: anytype, b: anytype) bool {
     if (a.rows() != b.rows() or a.cols() != b.cols()) return false;
     for (a.data, b.data) |a_row, b_row| {
-        if (@reduce(.Add, a_row) != @reduce(.Add, b_row)) return false;
+        if (!@import("std").meta.eql(a_row, b_row)) return false;
     }
     return true;
 }
