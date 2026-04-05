@@ -40,6 +40,9 @@ test "determinism" {
     var nn2 = nn_type.new();
     nn2.random_init(seed);
     
+    var nn3 = nn_type.new();
+    nn3.random_init(seed + 1);
+    
     var input = zffnn.Mat(1, 3).create(0);
     input.load([_][3]f32{
         .{ 1, 2, 3 }
@@ -47,5 +50,7 @@ test "determinism" {
     
     const output = nn.forward(input);
     const output2 = nn2.forward(input);
-    try expect(mat_equal(output, output2));    
+    const output3 = nn3.forward(input);
+    try expect(mat_equal(output, output2));
+    try expect(!mat_equal(output, output3));
 }
