@@ -3,7 +3,7 @@ const testing = std.testing;
 const expect = testing.expect;
 
 const zffnn = @import("zffnn");
-const mat_equal = @import("tests.zig").mat_equal;
+const mat_equal = @import("test_helpers.zig").mat_equal;
 
 test "relu" {
     var a = zffnn.Mat(2, 3).create(0);

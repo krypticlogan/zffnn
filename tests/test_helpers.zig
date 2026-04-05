@@ -3,7 +3,14 @@ const testing = std.testing;
 const expect = testing.expect;
 
 const zffnn = @import("zffnn");
-const mat_equal = @import("tests.zig").mat_equal;
+
+pub fn mat_equal(a: anytype, b: anytype) bool {
+    if (a.rows() != b.rows() or a.cols() != b.cols()) return false;
+    for (a.data, b.data) |a_row, b_row| {
+        if (!@import("std").meta.eql(a_row, b_row)) return false;
+    }
+    return true;
+}
 
 test "mat_equal" {
     var a = zffnn.Mat(2, 3).create(0);
