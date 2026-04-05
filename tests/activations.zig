@@ -40,7 +40,7 @@ test "softmax" {
     });
     
     const softmax_a = zffnn.Activation.apply(.softmax, a);
-    for (softmax_a.data) |row| {
+    for (softmax_a.data) |row| { // each row should sum to 1
         const sum = @reduce(.Add, row);
         try expect(1 - sum < 0.01); // accounting for floating point precision
     }

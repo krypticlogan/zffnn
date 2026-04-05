@@ -33,7 +33,7 @@ pub fn Layer(kind: layer_kind, activation: Activation, comptime len: usize, comp
             }
         }
 
-        fn random_fill_wb(self: *@This(), prng: std.Random.Xoshiro256) void {
+        pub fn random_fill_wb(self: *@This(), prng: *std.Random.Xoshiro256) void {
             if (self.kind == .input) @panic("Input layer has no weights or biases to fill");
             self.bias.randomFill(prng.random());
             self.weights.randomFill(prng.random());
