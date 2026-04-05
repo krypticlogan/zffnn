@@ -3,13 +3,6 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    // library
-    const mod = b.addModule("zffnn", .{
-        .root_source_file = b.path("src/root.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
     // embed params generator
     const gen = b.addExecutable(.{
         .name = "embed_helper",
@@ -21,11 +14,27 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(gen);
 
-    // tests
-    const mod_tests = b.addTest(.{
-        .root_module = mod,
+    // library
+    const root_mod = b.addModule("zffnn", .{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
     });
-    const run_mod_tests = b.addRunArtifact(mod_tests);
+
+    // tests
+    const test_mod = b.addModule("zffnn_tests", .{
+        .root_source_file = b.path("tests/tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    
+    test_mod.addImport("zffnn", root_mod);
+    
+    const tests = b.addTest(.{
+        .root_module = test_mod,
+    });
+    const run_mod_tests = b.addRunArtifact(tests);
+    
     const test_step = b.step("test", "Run tests");
 
     test_step.dependOn(&run_mod_tests.step);

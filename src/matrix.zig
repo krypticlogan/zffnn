@@ -179,7 +179,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return .none;
         }
 
-        test "test_isAddDefined" {
+        test "addIsDefined" {
             try std.testing.expect(addIsDefined(Mat(2, 4), Mat(2, 4)) == .full);
             try std.testing.expect(addIsDefined(Mat(15, 25), Mat(15, 1)) == .per_row);
             try std.testing.expect(addIsDefined(Mat(15, 25), Mat(15, 2)) == .none);
@@ -212,54 +212,11 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return a_type.m == b_type.n;
         }
 
-        test "test_isMulDefined" {
+        test "mulIsDefined" {
             try std.testing.expect(mulIsDefined(Mat(4, 2), Mat(2, 5)) == true);
             try std.testing.expect(mulIsDefined(Mat(1, 2), Mat(3, 4)) == false);
         }
-
-        // pub fn relu(mat: *const This) This {
-        //     var out = Mat(n, m).create(0);
-
-        //     for (0..mat.rows()) |row| {
-        //         for (0..mat.cols()) |col| {
-        //             out.set(row, col, @max(mat.get(row, col), 0));
-        //         }
-        //     }
-
-        //     return out;
-        // }
-
-        // pub fn sigmoid(mat: *const This) This {
-        //     var out = Mat(n, m).create(0);
-        //     for (0..mat.rows()) |row| {
-        //         for (0..mat.cols()) |col| {
-        //             out.set(row, col, 1 / (1 + @exp(-mat.get(row, col))));
-        //         }
-        //     }
-        //     return out;
-        // }
-
-        // pub fn softmax(mat: *const This) This {
-        //     // We transpose the matrix immediately, so that we may compute softmax per column in, but treat them per row for SIMD purposes
-        //     var out = mat.t();
-
-        //     // Here, we subtract the max value from each element's row before exponentiating to avoid overflow
-        //     for (0..out.rows()) |r| {
-        //         const maxv = @reduce(.Max, out.data[r]);
-        //         out.data[r] -= @as(@Vector(@TypeOf(out).m, f32), @splat(maxv));
-        //     }
-
-        //     // softmax per row (allowed since transposed)
-        //     const e_mat = out.exp();
-        //     const e_sum = e_mat.sum();
-        //     for (0..out.rows()) |i| {
-        //         const inv = 1.0 / e_sum.get(i, 0);
-        //         out.data[i] = e_mat.data[i] * @as(@Vector(n, f32), @splat(inv));
-        //     }
-        //     // transpose the output again to retain correct shape
-        //     return out.t();
-        // }
-
+        
         fn randomNormalizedFloat(rand: std.Random) f32 {
             const rand_float = rand.float(f32);
             return 2 * rand_float - 1;
