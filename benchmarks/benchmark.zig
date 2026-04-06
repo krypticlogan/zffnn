@@ -66,7 +66,7 @@ pub fn main() !void {
 }
 
 fn batch_sweep(comptime model: ModelDef) !void {
-    const file = try std.fs.cwd().createFile("zffnn_batchsweep_benchmark.csv", .{ .truncate = false });
+    const file = try std.fs.cwd().createFile("benchmarks/zffnn_batchsweep_benchmark.csv", .{ .truncate = false });
     defer file.close();
     try file.seekFromEnd(0);
 
@@ -143,7 +143,7 @@ fn batch_sweep(comptime model: ModelDef) !void {
 }
 
 fn benchmark_inference() !void {
-    var file = try std.fs.cwd().createFile("zffnn_inference_benchmark.csv", .{ .truncate = false });
+    var file = try std.fs.cwd().createFile("benchmarks/zffnn_inference_benchmark.csv", .{ .truncate = false });
     defer file.close();
 
     try file.seekFromEnd(0);
