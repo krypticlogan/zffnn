@@ -4,3 +4,4 @@ imgui.ini
 font
 desktop.ini
 synopsis.md
+__pycache__
