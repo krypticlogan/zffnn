@@ -27,15 +27,31 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    
+
     test_mod.addImport("zffnn", root_mod);
-    
+
     const tests = b.addTest(.{
         .root_module = test_mod,
     });
     const run_mod_tests = b.addRunArtifact(tests);
-    
+
     const test_step = b.step("test", "Run tests");
 
     test_step.dependOn(&run_mod_tests.step);
+
+    // benchmarks
+    const benchmark_mod = b.addModule("zffnn_benchmarks", .{
+        .root_source_file = b.path("benchmarks/benchmark.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    benchmark_mod.addImport("zffnn", root_mod);
+    const benchmark = b.addExecutable(.{
+        .name = "benchmark",
+        .root_module = benchmark_mod,
+    });
+    b.installArtifact(benchmark);
+    const run_benchmark = b.addRunArtifact(benchmark);
+    const benchmark_step = b.step("benchmark", "Run benchmarks");
+    benchmark_step.dependOn(&run_benchmark.step);
 }
