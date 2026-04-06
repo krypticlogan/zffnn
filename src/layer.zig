@@ -5,6 +5,7 @@ const Activation = @import("activations.zig").Activation;
 pub const layer_kind = union(enum) { input, hidden, output };
 
 pub fn Layer(kind: layer_kind, activation: Activation, comptime len: usize, comptime parent_len: usize, batch_size: usize) type {
+    const batched = batch_size > 1;
     return struct {
         weights: Mat(len, parent_len) = undefined,
         z: Mat(len, batch_size) = undefined,
@@ -41,8 +42,8 @@ pub fn Layer(kind: layer_kind, activation: Activation, comptime len: usize, comp
 
         pub fn forward(self: *@This(), layer_input: Mat(parent_len, batch_size)) void {
             if (self.kind == .input) @panic("Do not pass over the input layer. Complete all normalization and preprocessing prior to forward feed");
-            self.z = self.weights.mul(layer_input).add(self.bias);
-            self.a = self.activation.apply(self.z);
+            self.z = self.weights.mul(layer_input, batched).add(self.bias);
+            self.a = self.activation.apply(self.z, batched);
         }
     };
 }

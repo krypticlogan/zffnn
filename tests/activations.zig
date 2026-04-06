@@ -27,9 +27,13 @@ test "sigmoid" {
         .{ 4, -5, 6 },
     });
     
-    const sigmoid_a = zffnn.Activation.apply(.sigmoid, a);    
+    const sigmoid_a = zffnn.Activation.apply(.sigmoid, a);
     try expect(@reduce(.Min, sigmoid_a.data[0]) == sigmoid_a.data[0][2]);
     try expect(@reduce(.Max, sigmoid_a.data[1]) == sigmoid_a.data[1][2]);
+    
+    // numerical stability
+    try expect(sigmoid_a.data[0][0] == 0.2689414213699951);
+    try expect(sigmoid_a.data[1][0] == 0.9820137900379085);
 }
 
 test "softmax" {

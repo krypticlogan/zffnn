@@ -29,21 +29,28 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         pub fn init(mat: *This, fill_with: f32) void {
             mat.fill(fill_with);
         }
-        
+
         pub fn create(fill_with: f32) This {
             var mat: Mat(n, m) = undefined;
             mat.fill(fill_with);
             return mat;
         }
-        
+
         pub fn createRandom(prng: *std.Random.Xoshiro256) This {
             var mat: Mat(n, m) = undefined;
             mat.random_fill(prng.random());
             return mat;
         }
 
-        pub fn dupe_like(_: This) This {
-            return This.create(0);
+        pub fn dupe_like(mat: This, clone_or_zero: union(enum) { clone, zero }) This {
+            return switch (clone_or_zero) {
+                .clone => {
+                    var new: Mat(n, m) = undefined;
+                    new.data = mat.data;
+                    return new;
+                },
+                .zero => This.create(0),
+            };
         }
 
         pub fn load(mat: *This, arr_mat: [n][m]f32) void {
@@ -98,7 +105,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             mat.* = This.create(0);
         }
 
-        fn max_row(row: @Vector(m, f32)) f32 {
+        inline fn max_row(row: @Vector(m, f32)) f32 {
             return @reduce(.Max, row);
         }
 
@@ -110,24 +117,28 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return out;
         }
 
-        fn sum_row(row: @Vector(m, f32)) f32 {
+        inline fn sum_row(row: @Vector(m, f32)) f32 {
             return @reduce(.Add, row);
         }
 
-        pub fn sum(mat: *const This) Mat(n, 1) {
-            var out = Mat(n, 1).create(0);
+        pub fn sum_rwise(mat: *const This) @Vector(n, f32) {
+            var out: @Vector(n, f32) = @splat(0);
             for (0..mat.rows()) |row| {
-                out.data[row][0] = sum_row(mat.data[row]);
+                out[row] = sum_row(mat.data[row]);
             }
             return out;
         }
 
-        fn exp_row(row: @Vector(m, f32)) @Vector(m, f32) {
-            var out: @Vector(m, f32) = undefined;
-            for (0..m) |i| {
-                out[i] = @exp(row[i]);
+        pub fn sum_cwise(mat: *const This) @Vector(m, f32) {
+            var sum_vec: @Vector(m, f32) = @splat(0);
+            for (mat.data) |row| {
+                sum_vec += row;
             }
-            return out;
+            return sum_vec;
+        }
+
+        inline fn exp_row(row: @Vector(m, f32)) @Vector(m, f32) {
+            return @exp(row);
         }
 
         pub fn exp(mat: *const This) This {
@@ -195,11 +206,28 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         fn dot(comptime l: usize, a: @Vector(l, f32), b: @Vector(l, f32)) f32 {
             return @reduce(.Add, a * b);
         }
-
-        pub fn mul(a: *const This, b: anytype) Mat(n, @TypeOf(b).m) {
+        
+        pub fn mul(a: *const This, b: anytype, batched: bool) Mat(n, @TypeOf(b).m) {
             if (!comptime is_matrix(@TypeOf(a.*)) or !is_matrix(@TypeOf(b))) @compileError("The 'matrix' you provided is not really a matrix");
             if (!comptime mul_is_defined(@TypeOf(a.*), @TypeOf(b))) @compileError("Your multipication is misaligned, B must have the same number of rows as A has columns!");
-
+            if (batched) {
+                return batch_mul(a, b);
+            } else {
+                return single_mul(a, b);
+            }
+        }
+        
+        fn batch_mul(a: *const This, b: anytype) Mat(n, @TypeOf(b).m) {
+            var out = Mat(n, @TypeOf(b).m).create(0);
+            for (0..n) |row| {
+                for (0..m) |col| { // broadcasts the row of A to each column of B and sums their product to the output
+                    out.data[row] += @as(@TypeOf(out.data[row]), @splat(a.data[row][col])) * b.data[col];
+                }
+            }
+            return out;
+        }
+        
+        fn single_mul(a: *const This, b: anytype) Mat(n, @TypeOf(b).m) {
             var out = Mat(n, @TypeOf(b).m).create(0);
             const b_t = b.t();
 
