@@ -117,6 +117,9 @@ var nn = comptime Net.load_from_embeds();
 ```
 as shown before, and there goes your model, ready to recieve input.
 
+---
+
+# Internals
 ## Constraints
 
 ```definition.len``` >= 2
@@ -147,9 +150,11 @@ This makes mathematical operations easier for the engine, but allows users to ke
 ```zig 
 Mat(batch_size, input_size)
 ```
+
 Where:
 
 One row = one sample
+
 One column = one feature
 
 ### Internal Representation
@@ -159,13 +164,16 @@ All internal activations are stored as:
 ```zig
 Mat(layer_size, batch_size)
 ```
+
 So the input is transposed on entry.
 
 ### Output
 ```zig
 Mat(output_size, batch_size)
 ```
-### Forward Pass
+---
+
+## Forward Pass
 ```zig
 var nn = Net.new();
 const output = nn.forward(input);
