@@ -2,15 +2,13 @@
 const std = @import("std");
 const testing = std.testing;
 const expect = testing.expect;
+const approxEqAbs = testing.expectApproxEqAbs;
 
 const zffnn = @import("zffnn");
 
 test "mat mul" {
     var a = zffnn.Mat(2, 3).create(0);
-    a.load([_][3]f32{
-        .{ 1, 2, 3 },
-        .{ 4, 5, 6 },
-    });
+    a.load([_][3]f32{ .{ 1, 2, 3 }, .{ 4, 5, 6 } });
     var b = zffnn.Mat(3, 2).create(0);
     b.load([_][2]f32{
         .{ 7, 8 },
@@ -24,7 +22,7 @@ test "mat mul" {
     // {4, 5, 6}    * {9, 10} =     {4*7 + 5*9 + 6*11, 4*8 + 5*10 + 6*12}
     //                {11, 12}
 
-    const c = a.mul(b); // result is a 2x2 matrix
+    const c = a.mul(b, false); // result is a 2x2 matrix
     try expect(c.data[0][0] == 58);
     try expect(c.data[0][1] == 64);
     try expect(c.data[1][0] == 139);
@@ -135,15 +133,27 @@ test "col-wise sub" {
     try expect(c.data[1][2] == -6);
 }
 
-test "max" {
+test "max_rwise" {
     var a = zffnn.Mat(2, 3).create(0);
     a.load([_][3]f32{
         .{ 4, 3, 2 },
         .{ 2, 1, 0 },
     });
-    const c = a.max();
-    try expect(c.data[0][0] == 4);
-    try expect(c.data[1][0] == 2);
+    const c = a.max_rwise();
+    try expect(c[0] == 4);
+    try expect(c[1] == 2);
+}
+
+test "max_cwise" {
+    var a = zffnn.Mat(2, 3).create(0);
+    a.load([_][3]f32{
+        .{ 4, 3, 2 },
+        .{ 2, 1, 0 },
+    });
+    const c = a.max_cwise();
+    try expect(c[0] == 4);
+    try expect(c[1] == 3);
+    try expect(c[2] == 2);
 }
 
 test "exp" {
@@ -153,12 +163,13 @@ test "exp" {
         .{ 4, 5, 6 },
     });
     const c = a.exp();
-    try expect(c.data[0][0] == std.math.exp(@as(f32, 1.0)));
-    try expect(c.data[0][1] == std.math.exp(@as(f32, 2.0)));
-    try expect(c.data[0][2] == std.math.exp(@as(f32, 3.0)));
-    try expect(c.data[1][0] == std.math.exp(@as(f32, 4.0)));
-    try expect(c.data[1][1] == std.math.exp(@as(f32, 5.0)));
-    try expect(c.data[1][2] == std.math.exp(@as(f32, 6.0)));
+
+    try approxEqAbs(@exp(@as(f32, 1.0)), c.data[0][0], 1e-5);
+    try approxEqAbs(@exp(@as(f32, 2.0)), c.data[0][1], 1e-5);
+    try approxEqAbs(@exp(@as(f32, 3.0)), c.data[0][2], 1e-5);
+    try approxEqAbs(@exp(@as(f32, 4.0)), c.data[1][0], 1e-5);
+    try approxEqAbs(@exp(@as(f32, 5.0)), c.data[1][1], 1e-5);
+    try approxEqAbs(@exp(@as(f32, 6.0)), c.data[1][2], 1e-5);
 }
 
 test "transpose" {
@@ -175,4 +186,3 @@ test "transpose" {
     try expect(c.data[2][0] == 3);
     try expect(c.data[2][1] == 6);
 }
-

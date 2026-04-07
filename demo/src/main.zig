@@ -31,7 +31,6 @@ pub fn main() void {
 
     const predictionBarWidth: u16 = @divFloor(dashWidth * 6, 10);
     const predictionBarHeight = 20;
-    
     rl.setTraceLogLevel(.err);
     rl.initWindow(screenWidth, screenHeight, "zig nn demo");
     defer rl.closeWindow();
@@ -73,11 +72,10 @@ pub fn main() void {
                 model_preds = nn.forward(model_input);
                 model_preds.show(); // debug
 
-                const preds_row = model_preds.t(); // this needs to become reduce(.max, axis=.c)
-                const certainty = preds_row.max().get(0, 0); // ^^
+                const certainty = model_preds.max_cwise()[0]; // index 0 since there is only one column
                 var guess: u8 = 0;
                 while (guess < 10) : (guess += 1) {
-                    if (preds_row.get(0, guess) == certainty)
+                    if (model_preds.get(guess, 0) == certainty)
                         break;
                 } else unreachable;
                 print("Guess: {d}\n", .{guess});

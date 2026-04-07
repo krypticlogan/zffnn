@@ -77,6 +77,18 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return m;
         }
 
+        pub inline fn r(self: *const This, comptime i: usize) @Vector(n, f32) {
+            return self.data[i];
+        }
+
+        pub inline fn c(self: *const This, comptime i: usize) @Vector(m, f32) { // todo: come back to this
+            var col: @Vector(m, f32) = undefined;
+            inline for (0..m) |j| {
+                col[j] = self.data[j][i];
+            }
+            return col;
+        }
+
         pub inline fn set(self: *This, row: usize, col: usize, val: f32) void {
             self.data[row][col] = val;
         }
@@ -105,36 +117,44 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             mat.* = This.create(0);
         }
 
-        inline fn max_row(row: @Vector(m, f32)) f32 {
-            return @reduce(.Max, row);
+        pub inline fn max_vec(vec: anytype) f32 {
+            return @reduce(.Max, vec);
         }
 
-        pub fn max(mat: *const This) Mat(n, 1) {
-            var out = Mat(n, 1).create(0);
-            for (0..mat.rows()) |row| {
-                out.data[row][0] = max_row(mat.data[row]);
+        pub fn max_rwise(mat: *const This) @Vector(n, f32) {
+            var out: @Vector(n, f32) = undefined;
+            for (0..n) |row| {
+                out[row] = max_vec(mat.data[row]);
             }
             return out;
         }
 
-        inline fn sum_row(row: @Vector(m, f32)) f32 {
-            return @reduce(.Add, row);
+        pub fn max_cwise(mat: *const This) @Vector(m, f32) {
+            var out: @Vector(m, f32) = @splat(std.math.floatMin(f32));
+            for (mat.data) |row| {
+                out = @max(out, row);
+            }
+            return out;
+        }
+
+        pub inline fn sum_vec(vec: anytype) f32 {
+            return @reduce(.Add, vec);
         }
 
         pub fn sum_rwise(mat: *const This) @Vector(n, f32) {
             var out: @Vector(n, f32) = @splat(0);
-            for (0..mat.rows()) |row| {
-                out[row] = sum_row(mat.data[row]);
+            for (0..n) |i| {
+                out[i] = sum_vec(mat.data[i]);
             }
             return out;
         }
 
         pub fn sum_cwise(mat: *const This) @Vector(m, f32) {
-            var sum_vec: @Vector(m, f32) = @splat(0);
+            var out: @Vector(m, f32) = @splat(0);
             for (mat.data) |row| {
-                sum_vec += row;
+                out += row;
             }
-            return sum_vec;
+            return out;
         }
 
         inline fn exp_row(row: @Vector(m, f32)) @Vector(m, f32) {
@@ -143,7 +163,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
 
         pub fn exp(mat: *const This) This {
             var out = Mat(n, m).create(0);
-            for (0..mat.rows()) |row| {
+            for (0..n) |row| {
                 out.data[row] = exp_row(mat.data[row]);
             }
             return out;
@@ -206,7 +226,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         fn dot(comptime l: usize, a: @Vector(l, f32), b: @Vector(l, f32)) f32 {
             return @reduce(.Add, a * b);
         }
-        
+
         pub fn mul(a: *const This, b: anytype, batched: bool) Mat(n, @TypeOf(b).m) {
             if (!comptime is_matrix(@TypeOf(a.*)) or !is_matrix(@TypeOf(b))) @compileError("The 'matrix' you provided is not really a matrix");
             if (!comptime mul_is_defined(@TypeOf(a.*), @TypeOf(b))) @compileError("Your multipication is misaligned, B must have the same number of rows as A has columns!");
@@ -216,7 +236,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
                 return single_mul(a, b);
             }
         }
-        
+
         fn batch_mul(a: *const This, b: anytype) Mat(n, @TypeOf(b).m) {
             var out = Mat(n, @TypeOf(b).m).create(0);
             for (0..n) |row| {
@@ -226,7 +246,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             }
             return out;
         }
-        
+
         fn single_mul(a: *const This, b: anytype) Mat(n, @TypeOf(b).m) {
             var out = Mat(n, @TypeOf(b).m).create(0);
             const b_t = b.t();
