@@ -13,7 +13,9 @@ This library is primarily designed for **inference on pretrained models**, parti
 A demo is provided for example usage.
 
 
-#### *Note that this library is currently a work in progress and not fully tested. As such, it is not recommended for use in critical software. Use with caution and if you run into any issues during usage, make me aware and I'll do my best to get it fixed.*
+#### *Note that this library is currently in active development and not fully tested. As such, it is not recommended for use in critical software. Use with caution and if you run into any issues during usage, make me aware and I'll do my best to get it fixed.*
+
+*Also note that currently all parameters assumed to be f32, including at embedding time. Support for dtype is coming, but not yet implemented*
 
 ---
 

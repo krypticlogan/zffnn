@@ -61,8 +61,10 @@ pub fn main() !void {
     // const seed = args.next().?;
     // const layer_size = args.next().?;
     // const batch_size = args.next().?;
-    try benchmark_inference();
-    // try batch_sweep(medium_model);
+    // std.debug.print("Running Infernce Benchmark\n" ++ "=" ** 50 ++ "\n\n", .{});
+    // try benchmark_inference();
+    std.debug.print("Running Batch Sweep Benchmark\n" ++ "=" ** 50 ++ "\n\n", .{});
+    try batch_sweep(large_model);
 }
 
 fn batch_sweep(comptime model: ModelDef) !void {
@@ -77,9 +79,9 @@ fn batch_sweep(comptime model: ModelDef) !void {
     // defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const batch_sizes: []const usize = &.{ 1, 4, 16, 32, 64, 128, 512, 1024 };
+    const batch_sizes: []const usize = &.{ 1, 4, 16, 32, 64, 128 };
     // const batch_sizes: []const usize = &.{ 128 };
-    const iterations_per_batch: []const usize = &.{ 1_000_000, 10_000, 10_000, 10_000, 10_000, 7500, 7500, 7500 };
+    const iterations_per_batch: []const usize = &.{ 10_000, 500, 500, 250, 250, 100 };
     // const model_iterations: usize = 100_000;
     const seed = 500;
     const runs_per_model = 2;
@@ -155,7 +157,7 @@ fn benchmark_inference() !void {
     const allocator = gpa.allocator();
     var buf: [2048]u8 = undefined;
 
-    const batch_size = 1;
+    const batch_size = 32;
     const seed = 500;
     const runs_per_model = 3;
 
