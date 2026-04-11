@@ -6,3 +6,4 @@ desktop.ini
 synopsis.md
 __pycache__
 benchmarks/other_models
+zig-out
