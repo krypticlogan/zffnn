@@ -5,6 +5,7 @@ const build_options = @import("build_options");
 const optimize = builtin.mode;
 
 const zffnn = @import("zffnn");
+const zt = @import("ztracy");
 
 const Mat = zffnn.Mat;
 const Activation = zffnn.Activation;
@@ -98,9 +99,13 @@ pub fn main() !void {
     switch (which) {
         .inference => {
             std.debug.print("Running inference benchmark...\n" ++ "=" ** 50 ++ "\n", .{});
+            const zone = zt.ZoneNC(@src(), "inference", 0x00_FF_00_00 );
+            defer zone.End();
             try benchmark_inference(gpa.allocator(), model, batch, iterations, runs, seed, write_out);
         },
         .batch_sweep => {
+            // const batch_zone = zt.ZoneNC(@src(), "batch_sweep", 0x00_FF_00_00 );
+            // defer batch_zone.end();
             std.debug.print("Running batch sweep benchmark...\n" ++ "=" ** 50 ++ "\n", .{});
             try batch_sweep(gpa.allocator(), model, batch, iterations, runs, seed, write_out);
         },
@@ -111,6 +116,9 @@ pub fn main() !void {
 }
 
 fn inference_test(comptime model: ModelDef, comptime iterations: usize, comptime batch_size: usize, comptime seed: usize) f64 {
+    const zone = zt.ZoneNC(@src(), "inference test", 0x00_FF_00_99 );
+    defer zone.End();    
+    
     const feature_ct = model[0][0];
     var nn = zffnn.NN(model, batch_size).new();
     nn.random_init(seed);
@@ -208,22 +216,22 @@ fn batch_sweep(allocator: std.mem.Allocator, comptime model: ModelDef, comptime 
     defer if (file) |f| f.close();
 
     // file.writeAll("model,param_ct,optimize,batch_size,latency_min(ns/inference),latency_avg_ns,latency_max,throughput_min(inferences/sec),throughput_avg,throughput_max\n") catch unreachable;
-
-    var total_time_elapsed: f64 = 0;
-
-    var max_batch_latency_ns: f64 = 0;
-    var min_batch_latency_ns: f64 = @floatFromInt(std.math.maxInt(usize));
-    var total_batch_latency_ns: f64 = 0;
-
-    var max_latency_ns: f64 = 0;
-    var min_latency_ns: f64 = @floatFromInt(std.math.maxInt(usize));
-    var total_latency_ns: f64 = 0;
-
-    var max_throughput: f64 = 0;
-    var min_throughput: f64 = @floatFromInt(std.math.maxInt(usize));
-    var total_throughput: f64 = 0;
+    
     const batch_sizes = [_]usize{ 1, 2, 4, 16, 32, 64, 128, 256, 512, 1024 };
     for (batch_sizes) |batch| {
+        var total_time_elapsed: f64 = 0;
+    
+        var max_batch_latency_ns: f64 = 0;
+        var min_batch_latency_ns: f64 = @floatFromInt(std.math.maxInt(usize));
+        var total_batch_latency_ns: f64 = 0;
+    
+        var max_latency_ns: f64 = 0;
+        var min_latency_ns: f64 = @floatFromInt(std.math.maxInt(usize));
+        var total_latency_ns: f64 = 0;
+    
+        var max_throughput: f64 = 0;
+        var min_throughput: f64 = @floatFromInt(std.math.maxInt(usize));
+        var total_throughput: f64 = 0;
         // warm up
         const out = inference_test(model, iterations / 10, batch, seed);
         std.mem.doNotOptimizeAway(out);
