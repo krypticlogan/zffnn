@@ -5,7 +5,7 @@ const build_options = @import("build_options");
 const optimize = builtin.mode;
 
 const zffnn = @import("zffnn");
-const zt = @import("ztracy");
+// const zt = @import("ztracy");
 
 const Mat = zffnn.Mat;
 const Activation = zffnn.Activation;
@@ -22,22 +22,24 @@ fn param_ct(model: ModelDef) usize {
 const benchmark_summary = "Model: {s}\nTotal time elapsed: {d} sec\nRuns per model: {d}\nIterations per run: {d}\nBatch size: {d}\n\n";
 const stat_summary = "{s}:\n\tmin: {d:.2}\n\tavg: {d:.2}\n\tmax: {d:.2}\n";
 
-fn model2str(allocator: std.mem.Allocator, comptime model: ModelDef) ![]const u8 {
+fn model2str(allocator: std.mem.Allocator, comptime model: ModelDef, comptime model_layer_bytes: [model.len-1]usize) ![]const u8 {
     var model_str: std.ArrayList(u8) = .empty;
-    var buf: [20]u8 = undefined;
+    var layer_len_buf: [20]u8 = undefined;
+    var layer_size_buf: [20]u8 = undefined;
+    
     try model_str.appendSlice(allocator, @tagName(model[0][1]));
-    try model_str.appendSlice(allocator, try std.fmt.bufPrint(&buf, "({d})", .{model[0][0]}));
-    for (model[1..]) |layer| { // builds the models structure as a strings
-        try model_str.appendSlice(allocator, "-");
+    try model_str.appendSlice(allocator, try std.fmt.bufPrint(&layer_len_buf, "[{d}]", .{model[0][0]}));
+    for (model[1..], model_layer_bytes) |layer, layer_bytes| { // builds the models structure as a strings
+        try model_str.appendSlice(allocator, "/");
         try model_str.appendSlice(allocator, @tagName(layer[1]));
-        try model_str.appendSlice(allocator, try std.fmt.bufPrint(&buf, "({d})", .{layer[0]}));
+        try model_str.appendSlice(allocator, try std.fmt.bufPrint(&layer_len_buf, "[{d}]", .{layer[0]}));
+        try model_str.appendSlice(allocator, try std.fmt.bufPrint(&layer_size_buf, "({d}b)", .{layer_bytes}));
     }
     return try model_str.toOwnedSlice(allocator);
 }
 
 const Benchmark = enum {
     inference,
-    batch_sweep,
     ops,
 };
 
@@ -61,7 +63,70 @@ const large_model: ModelDef = &.{
     .{ 2, .softmax },
 };
 
-// const models: []const ModelDef = &.{ small_model, medium_model, large_model };
+const deep_model_1: ModelDef = &.{ // 8 layers
+    .{ 1, .none },
+    .{ 1, .relu },
+    .{ 1, .relu },
+    .{ 1, .relu },
+    .{ 1, .relu },
+    .{ 1, .relu },
+    .{ 1, .relu },
+    .{ 1, .softmax },
+};
+
+const deep_model_16: ModelDef = &.{ // 16 layers
+    .{ 16, .none },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .relu },
+    .{ 16, .softmax },
+};
+
+const deep_model_64: ModelDef = &.{
+    .{ 64, .none },
+    .{ 64, .relu },
+    .{ 64, .relu },
+    .{ 64, .relu },
+    .{ 64, .relu },
+    .{ 64, .relu },
+    .{ 64, .relu },
+    .{ 64, .softmax },
+};
+
+const wide_model: ModelDef = &.{
+    .{ 1024, .none },
+    .{ 1024, .relu },
+    .{ 1024, .softmax },
+};
+
+const hourglass_model: ModelDef = &.{
+    .{256, .none},
+    .{64, .relu},
+    .{16, .relu},
+    .{512, .relu},
+    .{1024, .softmax},
+};
+
+const teepee_model: ModelDef = &.{
+    .{256, .none},
+    .{64, .relu},
+    .{16, .relu},
+    .{512, .relu},
+    .{2, .softmax},
+};
+
+const models: []const ModelDef = &.{ small_model, medium_model, large_model, deep_model_1, deep_model_64, wide_model, hourglass_model };
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -70,8 +135,6 @@ pub fn main() !void {
     const which: Benchmark = blk: {
         if (comptime std.mem.eql(u8, build_options.benchmark, "inference")) {
             break :blk .inference;
-        } else if (comptime std.mem.eql(u8, build_options.benchmark, "batch_sweep")) {
-            break :blk .batch_sweep;
         } else if (comptime std.mem.eql(u8, build_options.benchmark, "ops")) {
             break :blk .ops;
         } else {
@@ -85,6 +148,18 @@ pub fn main() !void {
             break :blk medium_model;
         } else if (comptime std.mem.eql(u8, build_options.model, "large")) {
             break :blk large_model;
+        } else if (comptime std.mem.eql(u8, build_options.model, "deep_1")) {
+            break :blk deep_model_1;
+        } else if (comptime std.mem.eql(u8, build_options.model, "deep_64")) {
+            break :blk deep_model_64;
+        } else if (comptime std.mem.eql(u8, build_options.model, "wide")) {
+            break :blk wide_model;
+        } else if (comptime std.mem.eql(u8, build_options.model, "hourglass")) {
+            break :blk hourglass_model;
+        } else if (comptime std.mem.eql(u8, build_options.model, "teepee")) {
+            break :blk teepee_model;
+        } else if (comptime std.mem.eql(u8, build_options.model, "deep_16")) {
+            break :blk deep_model_16;
         } else {
             @compileError("Unknown model" ++ build_options.model);
         }
@@ -94,20 +169,14 @@ pub fn main() !void {
     const runs = build_options.runs;
     const seed = build_options.seed;
     const write_out = build_options.write_out;
-
+    
     std.debug.print("OPTIMIZE={s}\n", .{@tagName(optimize)});
     switch (which) {
         .inference => {
             std.debug.print("Running inference benchmark...\n" ++ "=" ** 50 ++ "\n", .{});
-            const zone = zt.ZoneNC(@src(), "inference", 0x00_FF_00_00 );
-            defer zone.End();
+            // const zone = zt.ZoneNC(@src(), "inference", 0x00_FF_00_00 );
+            // defer zone.End();
             try benchmark_inference(gpa.allocator(), model, batch, iterations, runs, seed, write_out);
-        },
-        .batch_sweep => {
-            // const batch_zone = zt.ZoneNC(@src(), "batch_sweep", 0x00_FF_00_00 );
-            // defer batch_zone.end();
-            std.debug.print("Running batch sweep benchmark...\n" ++ "=" ** 50 ++ "\n", .{});
-            try batch_sweep(gpa.allocator(), model, batch, iterations, runs, seed, write_out);
         },
         .ops => {
             @compileError("Not yet configured");
@@ -116,8 +185,8 @@ pub fn main() !void {
 }
 
 fn inference_test(comptime model: ModelDef, comptime iterations: usize, comptime batch_size: usize, comptime seed: usize) f64 {
-    const zone = zt.ZoneNC(@src(), "inference test", 0x00_FF_00_99 );
-    defer zone.End();    
+    // const zone = zt.ZoneNC(@src(), "inference test", 0x00_FF_00_99 );
+    // defer zone.End();    
     
     const feature_ct = model[0][0];
     var nn = zffnn.NN(model, batch_size).new();
@@ -138,12 +207,16 @@ fn inference_test(comptime model: ModelDef, comptime iterations: usize, comptime
 }
 
 fn benchmark_inference(allocator: std.mem.Allocator, comptime model: ModelDef, comptime batch: usize, comptime iterations: usize, comptime runs: usize, comptime seed: usize, write_out: bool) !void {
-    const model_str = try model2str(allocator, model);
+    comptime var model_layer_bytes: [model.len-1]usize = .{0} ** (model.len - 1);
+    inline for (model[1..], 0..) |layer, i| {
+        model_layer_bytes[i] = @sizeOf(f32) * (layer[0] * model[i][0] + batch * (layer[0] + model[i][0]));
+    }
+    const model_str = try model2str(allocator, model, model_layer_bytes);
     defer allocator.free(model_str);
 
     var file: ?std.fs.File = null;
     if (write_out) {
-        file = try std.fs.cwd().createFile("benchmarks/zffnn_batchsweep_benchmark.csv", .{ .truncate = false });
+        file = try std.fs.cwd().createFile("benchmarks/zffnn_inference_benchmark.csv", .{ .truncate = false });
         try file.?.seekFromEnd(0);
     }
     defer if (file) |f| f.close();
@@ -201,78 +274,6 @@ fn benchmark_inference(allocator: std.mem.Allocator, comptime model: ModelDef, c
         const csv_fmt = "{s},{d},{any},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2}\n";
         const csv_line = try std.fmt.bufPrint(&buf, csv_fmt, .{ model_str, param_ct(model), optimize, batch, min_latency_ns, avg_latency_ns, max_latency_ns, min_throughput, avg_throughput, max_throughput });
         try f.writeAll(csv_line);
-    }
-}
-
-fn batch_sweep(allocator: std.mem.Allocator, comptime model: ModelDef, comptime iterations: usize, comptime runs: usize, comptime seed: usize, write_out: bool) !void {
-    const model_str = try model2str(allocator, model);
-    defer allocator.free(model_str);
-
-    var file: ?std.fs.File = null;
-    if (write_out) {
-        file = try std.fs.cwd().createFile("benchmarks/zffnn_batchsweep_benchmark.csv", .{ .truncate = false });
-        try file.?.seekFromEnd(0);
-    }
-    defer if (file) |f| f.close();
-
-    // file.writeAll("model,param_ct,optimize,batch_size,latency_min(ns/inference),latency_avg_ns,latency_max,throughput_min(inferences/sec),throughput_avg,throughput_max\n") catch unreachable;
-    
-    const batch_sizes = [_]usize{ 1, 2, 4, 16, 32, 64, 128, 256, 512, 1024 };
-    for (batch_sizes) |batch| {
-        var total_time_elapsed: f64 = 0;
-    
-        var max_batch_latency_ns: f64 = 0;
-        var min_batch_latency_ns: f64 = @floatFromInt(std.math.maxInt(usize));
-        var total_batch_latency_ns: f64 = 0;
-    
-        var max_latency_ns: f64 = 0;
-        var min_latency_ns: f64 = @floatFromInt(std.math.maxInt(usize));
-        var total_latency_ns: f64 = 0;
-    
-        var max_throughput: f64 = 0;
-        var min_throughput: f64 = @floatFromInt(std.math.maxInt(usize));
-        var total_throughput: f64 = 0;
-        // warm up
-        const out = inference_test(model, iterations / 10, batch, seed);
-        std.mem.doNotOptimizeAway(out);
-
-        for (0..runs) |_| {
-            const total_ns = inference_test(model, iterations, batch, seed);
-            total_time_elapsed += total_ns;
-            total_time_elapsed += total_ns / std.time.ns_per_s;
-
-            const batch_latency_ns = total_ns / iterations;
-            if (batch_latency_ns > max_batch_latency_ns) max_batch_latency_ns = batch_latency_ns;
-            if (batch_latency_ns < min_batch_latency_ns) min_batch_latency_ns = batch_latency_ns;
-            total_batch_latency_ns += batch_latency_ns;
-
-            const total_inferences = iterations * batch;
-
-            const latency_ns = total_ns / total_inferences;
-            if (latency_ns > max_latency_ns) max_latency_ns = latency_ns;
-            if (latency_ns < min_latency_ns) min_latency_ns = latency_ns;
-            total_latency_ns += latency_ns;
-
-            const inferences_per_sec = std.time.ns_per_s / latency_ns;
-            if (inferences_per_sec > max_throughput) max_throughput = inferences_per_sec;
-            if (inferences_per_sec < min_throughput) min_throughput = inferences_per_sec;
-            total_throughput += inferences_per_sec;
-        }
-
-        const avg_batch_latency_ns = total_batch_latency_ns / runs;
-        const avg_latency_ns = total_latency_ns / runs;
-        const avg_throughput = total_throughput / runs;
-
-        const benchmark_output_fmt = benchmark_summary ++ stat_summary ++ stat_summary ++ stat_summary;
-        std.debug.print(benchmark_output_fmt, .{ model_str, total_time_elapsed / std.time.ns_per_s, runs, iterations, batch, "Latency (ns/inference)", min_latency_ns, avg_latency_ns, max_latency_ns, "Batch latency (ns/batch)", min_batch_latency_ns, avg_batch_latency_ns, max_batch_latency_ns, "Throughput (inferences/sec)", min_throughput, avg_throughput, max_throughput });
-        std.debug.print("________________________________\n\n", .{});
-
-        if (file) |f| {
-            var buf: [2048]u8 = undefined;
-            const csv_fmt = "{s},{d},{any},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2}\n";
-            const csv_line = try std.fmt.bufPrint(&buf, csv_fmt, .{ model_str, param_ct(model), optimize, batch, min_latency_ns, avg_latency_ns, max_latency_ns, min_throughput, avg_throughput, max_throughput });
-            try f.writeAll(csv_line);
-        }
     }
 }
 
