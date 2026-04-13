@@ -22,7 +22,30 @@ test "mat mul" {
     // {4, 5, 6}    * {9, 10} =     {4*7 + 5*9 + 6*11, 4*8 + 5*10 + 6*12}
     //                {11, 12}
 
-    const c = a.mul(b, false); // result is a 2x2 matrix
+    const c = a.mul(&b, false); // result is a 2x2 matrix
+    try expect(c.data[0][0] == 58);
+    try expect(c.data[0][1] == 64);
+    try expect(c.data[1][0] == 139);
+    try expect(c.data[1][1] == 154);
+}
+
+test "mat mul batched" {
+    var a = zffnn.Mat(2, 3).create(0);
+    a.load([_][3]f32{ .{ 1, 2, 3 }, .{ 4, 5, 6 } });
+    var b = zffnn.Mat(3, 2).create(0);
+    b.load([_][2]f32{
+        .{ 7, 8 },
+        .{ 9, 10 },
+        .{ 11, 12 },
+    });
+
+    // mat mul like:
+    //
+    // {1, 2, 3}      {7, 8}        {1*7 + 2*9 + 3*11, 1*8 + 2*10 + 3*12}
+    // {4, 5, 6}    * {9, 10} =     {4*7 + 5*9 + 6*11, 4*8 + 5*10 + 6*12}
+    //                {11, 12}
+
+    const c = a.mul(&b, true); // result is a 2x2 matrix
     try expect(c.data[0][0] == 58);
     try expect(c.data[0][1] == 64);
     try expect(c.data[1][0] == 139);
