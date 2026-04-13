@@ -15,14 +15,10 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
     const depth = def.len;
     comptime var layers: [depth]type = undefined;
     // Create nodes and weights
-    // var child_len: usize = 0;
     var parent_len: usize = 0;
     inline for (def, 0..) |layer_def, layer| {
         const nodes_len = layer_def[0];
         if (layer > 0) parent_len = def[layer - 1][0];
-
-        // if (layer < depth - 1) child_len = def[layer + 1][0]
-        // else child_len = 0;
 
         const kind: layer_kind = blk: {
             if (layer == 0) break :blk .input;
@@ -36,16 +32,12 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
 
     return struct {
         const This = @This();
-        // var rand_gen: usize = 0;
-
         layers: LayersTuple = undefined,
         num_nodes: usize = undefined,
-        // renderer: Renderer(shape),
-        // allocator: std.mem.Allocator,
 
         /// Build a new predefined NN with the definition provided
         pub fn new() This {
-            @setEvalBranchQuota(2_000_000_000);
+            @setEvalBranchQuota(2_000_000_000); // large eval quota here due to high number of branches when building at comptime
             const self: This = comptime blk: {
                 var tmp: This = undefined;
                 tmp.num_nodes = 0;
@@ -105,9 +97,17 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
                 print("\n", .{});
             }
         }
+        
+        pub fn forward(self: *@This(), input: Mat(batch_size, def[0][0])) Mat(def[depth - 1][0], batch_size) {
+            self.layers[0].a = input.t();
+            inline for (1..depth) |i| {
+                var layer = &self.layers[i];
+                const prev_out = self.layers[i - 1].a;
+                layer.forward(&prev_out);
+            }
+            return self.layers[depth - 1].a;
+        }
 
-        // pub fn train(nn: *@This(), iterations: usize) void {
-        //     const bar_size = 35;
         //     var bar: [bar_size + 1]u8 = undefined;
         //     bar[bar_size] = '|';
         //     var iter: usize = 0;
@@ -121,17 +121,6 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
         //         nn.forward();
         //         // backprop
         //     }
-        //     print("\n", .{});
-        // }
 
-        pub fn forward(self: *@This(), input: Mat(batch_size, def[0][0])) Mat(def[depth - 1][0], batch_size) {
-            self.layers[0].a = input.t();
-            inline for (1..depth) |i| {
-                var layer = &self.layers[i];
-                const prev_out = self.layers[i - 1].a;
-                layer.forward(prev_out);
-            }
-            return self.layers[depth - 1].a;
-        }
     };
 }
