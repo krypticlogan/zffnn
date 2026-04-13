@@ -51,8 +51,8 @@ pub fn Layer(kind: layer_kind, activation: Activation, comptime len: usize, comp
         pub fn init(layer: *@This()) void {
             layer.activation = activation;
             layer.kind = kind;
-            const desc = std.fmt.comptimePrint("Layer.init: kind={any} layer_sz_bytes={any}b regime={any} batch_standard={any}\n", .{layer.kind, active_bytes, size_standard, batch_standard});
-            @compileLog(desc);
+            // const desc = std.fmt.comptimePrint("Layer.init: kind={any} layer_sz_bytes={any}b regime={any} batch_standard={any}\n", .{layer.kind, active_bytes, size_standard, batch_standard});
+            // @compileLog(desc);
             switch (layer.kind) {
                 .hidden, .output => {
                     layer.bias.init(0);
