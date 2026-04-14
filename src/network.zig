@@ -4,7 +4,7 @@ const print = std.debug.print;
 const Activation = @import("activations.zig").Activation;
 const Mat = @import("matrix.zig").Mat;
 const Layer = @import("layer.zig").Layer;
-const layer_kind = @import("layer.zig").layer_kind;
+const layer_role = @import("layer.zig").Role;
 
 /// Generates a new network with the shape specified
 /// - The shape should be of a array type
@@ -20,7 +20,7 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
         const nodes_len = layer_def[0];
         if (layer > 0) parent_len = def[layer - 1][0];
 
-        const kind: layer_kind = blk: {
+        const kind: layer_role = blk: {
             if (layer == 0) break :blk .input;
             if (layer + 1 != depth) break :blk .hidden;
             break :blk .output;

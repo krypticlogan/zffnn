@@ -27,12 +27,10 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         const Col = @Vector(n, f32);
 
         const tile_width = std.simd.suggestVectorLength(f32) orelse 1;
-        const TiledRow = @Vector(tile_width, f32);
-        const row_tiles = m / tile_width;
-        const row_tiles_leftover = m % tile_width;
 
-        const col_tiles = n / tile_width;
-        const col_tiles_leftover = n % tile_width;
+        const TiledRow = @Vector(tile_width, f32);
+        
+        const row_tiles: usize = @ceil(@as(f16, (@floatFromInt(m))) / tile_width);
 
         data: [n]Row,
 
@@ -97,6 +95,24 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
                 col[j] = self.data[j][i];
             }
             return col;
+        }
+        
+        fn get_tile(self: *const This, row_i: usize, start: usize) TiledRow {
+            const row = self.data[row_i];
+            const end = @min(start + tile_width, m);
+            var tile: TiledRow = undefined;
+            for (0..end) |i| {
+                tile[i - start] = row[i];
+            }
+            return tile;
+        }
+        
+        fn load_tile(self: *This, row_i: usize, start: usize, tile: TiledRow) void {
+            var row = &self.data[row_i];
+            const end = @min(start + tile_width, m);
+            for (start..end) |i| {
+                row[i] = tile[i - start];
+            }
         }
 
         pub inline fn set(self: *This, row: usize, col: usize, val: f32) void {
@@ -300,7 +316,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             if (!comptime mul_is_defined(@TypeOf(a.*), @TypeOf(b.*))) @compileError("Your multipication is misaligned, B must have the same number of rows as A has columns!");
             if (batched) {
                 if (large) {
-                    large_mul_into(a, b, out);
+                    blocked_large_mul_into(a, b, out);
                 } else {
                     batch_mul_into(a, b, out);
                 }
@@ -308,11 +324,11 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
                 single_mul_into(a, b, out);
             }
         }
-        
-        pub fn large_mul_into(a: *const This, b: anytype, out: *Mat(n, @TypeOf(b.*).m)) void {
+
+        pub fn large_mul_into(a: *const This, b: anytype, out: *Mat(n, @TypeOf(b.*).m)) void { // todo:  test for equality between other muls
             out.clear();
             // std.debug.print("large_mul_into: n={} m={}\n", .{n, m});
-            const R = @TypeOf(a.*).tile_width;
+            const R = tile_width;
             var _r: usize = 0;
             while (_r < n) : (_r += R) {
                 const r_end = @min(_r + R, n);
@@ -320,7 +336,36 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
                 while (k < m) : (k += 1) {
                     var rr = _r;
                     while (rr < r_end) : (rr += 1) {
-                        out.data[rr] += @as(@TypeOf(b.*).Row, @splat(a.data[rr][k])) *  b.data[k];
+                        out.data[rr] += @as(@TypeOf(b.*).Row, @splat(a.data[rr][k])) * b.data[k];
+                    }
+                }
+            }
+        }
+
+        pub fn blocked_large_mul_into(a: *const This, b: anytype, out: *Mat(n, @TypeOf(b.*).m)) void { // todo:  test for equality between other muls
+            out.clear();
+            // std.debug.print("blocked large_mul_into: n={} m={}\n", .{n, m});
+            // const R = @TypeOf(a.*).tile_width;
+            const R = tile_width;
+            const C = tile_width;
+            var _r: usize = 0;
+            while (_r < n) : (_r += R) {
+                var j: usize = 0;
+                while (j < @TypeOf(b.*).m) : (j += C) {
+                    var accs: [R]@TypeOf(b.*).TiledRow = undefined; // accumulator for the tile
+                    inline for (&accs) |*acc| acc.* = @splat(0);
+                    const r_end = @min(_r + R, n);
+                    var _k: usize = 0;
+                    while (_k < m) : (_k += 1) {
+                        const b_tile: @TypeOf(b.*).TiledRow = b.get_tile(_k, j);
+                        var rr = _r;
+                        while (rr < r_end) : (rr += 1) {
+                            accs[rr] += @as(@TypeOf(b.*).TiledRow, @splat(a.data[rr][_k])) * b_tile;
+                        }
+                    }
+                    var rr = _r;
+                    while (rr < r_end) : (rr += 1) {
+                        out.load_tile(rr, _r, accs[rr]);
                     }
                 }
             }
@@ -344,7 +389,6 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
                 }
             }
         }
-        
 
         fn mul_is_defined(comptime a_type: anytype, comptime b_type: anytype) bool {
             return a_type.m == b_type.n;

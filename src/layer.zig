@@ -2,9 +2,9 @@ const std = @import("std");
 const Mat = @import("matrix.zig").Mat;
 const Activation = @import("activations.zig").Activation;
 
-pub const layer_kind = union(enum) { input, hidden, output };
+// pub const layer_kind = union(enum) { input, hidden, output };
 
-const Role = enum {
+pub const Role = union(enum) {
     input,
     hidden,
     output,
@@ -16,8 +16,8 @@ const BatchStandard = enum {
     multi, // this is the general path for moderately sized models with batched outputs
 };
 
-const medium_model_threshold = 32 * 1024; // b
-const large_model_threshold = 512 * 1024; // b
+const medium_model_threshold = 32 * 1000; // b
+const large_model_threshold = 512 * 1000; // b
 const SizeStandard = enum {
     small, // this is for small models
     medium, // this is for medium models
@@ -30,11 +30,15 @@ const ShapeStandard = enum {
   square,
 };
 
-pub fn Layer(kind: layer_kind, activation: Activation, comptime len: usize, comptime parent_len: usize, batch_size: usize) type {
+pub fn Layer(kind: Role, activation: Activation, comptime len: usize, comptime parent_len: usize, batch_size: usize) type {
     return struct {
+        // out: len
+        // in: parent_len
+        // internal width: batch_size
+        // 
         // first, we do some classification of the layer's shape and size to determine the best path
         const active_bytes = @sizeOf(f32) * (parent_len * len + batch_size * (parent_len + len)); // sizeof dtype ( out * in + batch_size * (out + in) );
-        const size_standard: SizeStandard = if (active_bytes > large_model_threshold) .large else if (active_bytes > medium_model_threshold) .medium else .small;
+        const size_standard: SizeStandard = if (active_bytes >= large_model_threshold) .large else if (active_bytes >= medium_model_threshold) .medium else .small;
         const batch_standard: BatchStandard = if (batch_size == 1) .one else .multi;
         const shape_standard: ShapeStandard = if (len > parent_len) .wide else if (len < parent_len) .skinny else .square;
         
@@ -43,7 +47,7 @@ pub fn Layer(kind: layer_kind, activation: Activation, comptime len: usize, comp
         a: Mat(len, batch_size) = undefined,
         bias: Mat(len, 1) = undefined,
         activation: Activation = undefined,
-        kind: layer_kind,
+        kind: Role,
 
         /// - pass a random type to this function and the weights and biases will be initalized to deterministic (per rand seed) random floats
         /// - random floats are normalized between -1 and 1
@@ -51,10 +55,10 @@ pub fn Layer(kind: layer_kind, activation: Activation, comptime len: usize, comp
         pub fn init(layer: *@This()) void {
             layer.activation = activation;
             layer.kind = kind;
-            // const desc = std.fmt.comptimePrint("Layer.init: kind={any} layer_sz_bytes={any}b regime={any} batch_standard={any}\n", .{layer.kind, active_bytes, size_standard, batch_standard});
-            // @compileLog(desc);
             switch (layer.kind) {
                 .hidden, .output => {
+                    // const desc = std.fmt.comptimePrint("Layer.init: {d}x{d} batch={d} kind={any} layer_sz_bytes={any}b regime={any} batch_standard={any}\n", .{parent_len, len, batch_size, layer.kind, active_bytes, size_standard, batch_standard});
+                    // @compileLog(desc);
                     layer.bias.init(0);
                     layer.weights.init(0);
                     layer.a.init(0);
