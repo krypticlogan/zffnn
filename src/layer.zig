@@ -14,9 +14,12 @@ const BatchStandard = enum {
     multi, // this is the general path for moderately sized models with batched outputs
 };
 
-const medium_model_threshold = 32 * 1000; // b
+const small_model_threshold = 32 * 1000; // b
+const medium_model_threshold = 256 * 1000; // b
 const large_model_threshold = 512 * 1000; // b
+
 const SizeStandard = enum {
+    fast, // the smallest (fastest) models
     small, // this is for small models
     medium, // this is for medium models
     large, // this is for large models
@@ -24,7 +27,7 @@ const SizeStandard = enum {
 
 const ShapeStandard = enum {
   wide,
-  skinny,
+  skinny, // 
   square,
 };
 
@@ -36,7 +39,11 @@ pub fn Layer(kind: Role, activation: Activation, comptime len: usize, comptime p
         // 
         // first, we do some classification of the layer's shape and size to determine the best path
         const active_bytes = @sizeOf(f32) * (parent_len * len + batch_size * (parent_len + len)); // sizeof dtype ( out * in + batch_size * (out + in) );
-        const size_standard: SizeStandard = if (active_bytes >= large_model_threshold) .large else if (active_bytes >= medium_model_threshold) .medium else .small;
+        const size_standard: SizeStandard = if (active_bytes >= large_model_threshold)
+            // .large else if (active_bytes >= medium_model_threshold)
+            .medium else if (active_bytes >= small_model_threshold)
+            .small else
+            .fast;
         const batch_standard: BatchStandard = if (batch_size == 1) .one else .multi;
         const shape_standard: ShapeStandard = if (len > parent_len) .wide else if (len < parent_len) .skinny else .square;
         
@@ -81,18 +88,25 @@ pub fn Layer(kind: Role, activation: Activation, comptime len: usize, comptime p
                 self.activation.apply(&self.a, false);
             } else {
                 switch (size_standard) {
-                    .small => {
+                    .fast => {
                         self.a = self.weights.mul(layer_input, true).add(self.bias);
                         self.activation.apply(&self.a, true);
                     },
+                    .small => {
+                        // self.a = self.weights.mul(layer_input, true).add(self.bias);
+                        // self.activation.apply(&self.a, true);
+                        self.weights.mul_(layer_input, &self.a, @intFromEnum(size_standard));
+                        self.a.add_(self.bias);
+                        self.activation.apply(&self.a, true);
+                    },
                     .medium => {
-                        self.weights.mul_(layer_input, &self.a, true, false);
+                        self.weights.mul_(layer_input, &self.a, @intFromEnum(size_standard));
                         self.a.add_(self.bias);
                         self.activation.apply(&self.a, true);
                     },
                     .large => {
                         // std.debug.print("large", .{});
-                        self.weights.mul_(layer_input, &self.a, true, true);
+                        self.weights.mul_(layer_input, &self.a, @intFromEnum(size_standard));
                         self.a.add_(self.bias);
                         self.activation.apply(&self.a, true);
                     },
