@@ -7,13 +7,13 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         const This = @This();
         pub const n = row_ct;
         pub const m = col_ct;
-        const Axis = union(enum) { r, c };
-        const Row = @Vector(m, f32);
-        const Col = @Vector(n, f32);
+        pub const Axis = union(enum) { r, c };
+        pub const Row = @Vector(m, f32);
+        pub const Col = @Vector(n, f32);
 
         const tile_width = std.simd.suggestVectorLength(f32) orelse 1;
 
-        const TiledRow = @Vector(tile_width, f32);
+        pub const TiledRow = @Vector(tile_width, f32);
         const row_tiles: usize = @ceil(@as(f16, (@floatFromInt(m))) / tile_width);
 
         data: [n]Row,
@@ -81,10 +81,10 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return col;
         }
 
-        fn get_tile(self: *const This, row_i: usize, start: usize) TiledRow {
+        pub fn get_tile(self: *const This, row_i: usize, start: usize) TiledRow {
             const row = self.data[row_i];
             const end = @min(start + tile_width, m);
-            var tile: TiledRow = undefined;
+            var tile: TiledRow = @splat(0);
             // std.debug.print("get_tile: row_i={d} start={d} end={d}\n", .{row_i, start, end});
             for (start..end) |i| {
                 tile[i - start] = row[i];
@@ -92,7 +92,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return tile;
         }
 
-        fn load_tile(self: *This, row_i: usize, start: usize, tile: TiledRow) void {
+        pub fn load_tile(self: *This, row_i: usize, start: usize, tile: TiledRow) void {
             var row = &self.data[row_i];
             const end = @min(start + tile_width, m);
             // std.debug.print("load_tile: row_i={d} start={d} end={d}\n", .{row_i, start, end});
@@ -190,7 +190,6 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return out;
         }
 
-        // todo : inplace variants
         pub fn add(a: *const This, b: anytype) This {
             var out = This.create(0);
             switch (comptime validation.elemwise_is_defined(@TypeOf(a.*), @TypeOf(b))) {
@@ -249,7 +248,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
 
         
 
-        fn dot(comptime l: usize, a: @Vector(l, f32), b: @Vector(l, f32)) f32 {
+        inline fn dot(comptime l: usize, a: @Vector(l, f32), b: @Vector(l, f32)) f32 {
             return @reduce(.Add, a * b);
         }
 
@@ -286,21 +285,16 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return out;
         }
 
-        pub fn mul_(a: *const This, b: anytype, out: *Mat(n, @TypeOf(b.*).m), batched: bool, large: bool) void {
+        pub fn mul_(a: *const This, b: anytype, out: *Mat(n, @TypeOf(b.*).m), mul_size: usize) void {
             // _ = batched;
             if (!comptime validation.is_matrix(@TypeOf(a.*)) or !validation.is_matrix(@TypeOf(b.*))) @compileError("The 'matrix' you provided is not really a matrix");
             if (!comptime validation.mul_is_defined(@TypeOf(a.*), @TypeOf(b.*))) @compileError("Your multipication is misaligned, B must have the same number of rows as A has columns!");
             // const batch = @TypeOf(b.*).m;
-            if (batched) {
-                if (large) {
-                    blocked_large_mul_(a, b, out);
-                } else {
-                    // print("batch_mul_into: n={} m={}\n", .{n, m});
-                    batch_mul_(a, b, out);
-                }
-            } else {
-                // print("single_mul_into: n={} m={}\n", .{n, m});
-                single_mul_(a, b, out);
+            switch (mul_size) {
+                1 => batch_mul_(a, b, out),
+                2 => large_mul_(a, b, out),
+                3 => blocked_large_mul_(a, b, out),
+                else => @panic("unsupported mul_size"),
             }
         }
 
