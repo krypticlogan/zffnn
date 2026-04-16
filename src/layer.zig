@@ -2,8 +2,6 @@ const std = @import("std");
 const Mat = @import("matrix.zig").Mat;
 const Activation = @import("activations.zig").Activation;
 
-// pub const layer_kind = union(enum) { input, hidden, output };
-
 pub const Role = union(enum) {
     input,
     hidden,
@@ -88,14 +86,14 @@ pub fn Layer(kind: Role, activation: Activation, comptime len: usize, comptime p
                         self.activation.apply(&self.a, true);
                     },
                     .medium => {
-                        self.weights.mul_into(layer_input, &self.a, true, false);
-                        self.a.i_add(self.bias);
+                        self.weights.mul_(layer_input, &self.a, true, false);
+                        self.a.add_(self.bias);
                         self.activation.apply(&self.a, true);
                     },
                     .large => {
                         // std.debug.print("large", .{});
-                        self.weights.mul_into(layer_input, &self.a, true, true);
-                        self.a.i_add(self.bias);
+                        self.weights.mul_(layer_input, &self.a, true, true);
+                        self.a.add_(self.bias);
                         self.activation.apply(&self.a, true);
                     },
                 }

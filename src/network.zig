@@ -97,7 +97,8 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
                 print("\n", .{});
             }
         }
-        
+            
+    // todo: forward into
         pub fn forward(self: *@This(), input: Mat(batch_size, def[0][0])) Mat(def[depth - 1][0], batch_size) {
             self.layers[0].a = input.t();
             inline for (1..depth) |i| {
@@ -106,6 +107,16 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
                 layer.forward(&prev_out);
             }
             return self.layers[depth - 1].a;
+        }
+        
+        pub fn forward_(self: *@This(), input: Mat(def[0][0], batch_size), out: *Mat(def[depth - 1][0], batch_size)) void {
+            self.layers[0].a = input;
+            inline for (1..depth) |i| {
+                var layer = &self.layers[i];
+                const prev_out = self.layers[i - 1].a;
+                layer.forward(&prev_out);
+            }
+            out.* = self.layers[depth - 1].a;
         }
 
         //     var bar: [bar_size + 1]u8 = undefined;

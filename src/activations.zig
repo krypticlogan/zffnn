@@ -5,7 +5,7 @@ pub const Activation = union(enum(u8)) {
     sigmoid,
     softmax,
 
-    pub fn apply(self: Activation,mat: anytype, batched: bool) void {
+    pub fn apply(self: Activation, mat: anytype, batched: bool) void {
         switch (self) {
             .none => return,
             .relu => relu(mat),
