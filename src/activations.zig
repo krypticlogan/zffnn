@@ -48,9 +48,9 @@ pub fn softmax(mat: anytype, batched: bool) void {
 pub fn batch_softmax(mat: anytype) void {
     var temp = mat.dupe_like(.clone);
     
-    var max_vec: @TypeOf(temp.data[0]) = @splat(std.math.floatMin(f32));
-    for (temp.data, 0..) |row, r| { // Here, we subtract the max value from each element's row before exponentiating to avoid overflow
-        max_vec = @select(f32, row > max_vec, row, max_vec);
+    // var max_vec: @TypeOf(temp.data[0]) = @splat(std.math.floatMin(f32));
+    const max_vec = temp.max_cwise();
+    for (0..temp.rows()) |r| { // Here, we subtract the max value from each element's row before exponentiating to avoid overflow
         temp.data[r] -= max_vec; 
     }
     
