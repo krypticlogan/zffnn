@@ -128,47 +128,52 @@ const teepee_model: ModelDef = &.{
 
 const models: []const ModelDef = &.{ small_model, medium_model, large_model, deep_model_1, deep_model_64, wide_model, hourglass_model };
 
+const which: Benchmark = blk: {
+    if (std.mem.eql(u8, build_options.benchmark, "inference")) {
+        break :blk .inference;
+    } else if (std.mem.eql(u8, build_options.benchmark, "ops")) {
+        break :blk .ops;
+    } else {
+        @compileError("Unknown benchmark" ++ build_options.benchmark);
+    }
+};
+
+const model_def: ModelDef = blk: {
+    if (std.mem.eql(u8, build_options.model, "small")) {
+        break :blk small_model;
+    } else if (std.mem.eql(u8, build_options.model, "medium")) {
+        break :blk medium_model;
+    } else if (std.mem.eql(u8, build_options.model, "large")) {
+        break :blk large_model;
+    } else if (std.mem.eql(u8, build_options.model, "deep_1")) {
+        break :blk deep_model_1;
+    } else if (std.mem.eql(u8, build_options.model, "deep_64")) {
+        break :blk deep_model_64;
+    } else if (std.mem.eql(u8, build_options.model, "wide")) {
+        break :blk wide_model;
+    } else if (std.mem.eql(u8, build_options.model, "hourglass")) {
+        break :blk hourglass_model;
+    } else if (std.mem.eql(u8, build_options.model, "teepee")) {
+        break :blk teepee_model;
+    } else if (std.mem.eql(u8, build_options.model, "deep_16")) {
+        break :blk deep_model_16;
+    } else {
+        @compileError("Unknown model" ++ build_options.model);
+    }
+};
+const batch = build_options.batch_size;
+const iterations = build_options.iterations;
+const runs = build_options.runs;
+const seed = build_options.seed;
+const write_out = build_options.write_out;
+
+const feature_ct = model_def[0][0];
+const Net = zffnn.NN(model_def, batch);
+var net = Net.new();
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-
-    const which: Benchmark = blk: {
-        if (comptime std.mem.eql(u8, build_options.benchmark, "inference")) {
-            break :blk .inference;
-        } else if (comptime std.mem.eql(u8, build_options.benchmark, "ops")) {
-            break :blk .ops;
-        } else {
-            @compileError("Unknown benchmark" ++ build_options.benchmark);
-        }
-    };
-    const model: ModelDef = blk: {
-        if (comptime std.mem.eql(u8, build_options.model, "small")) {
-            break :blk small_model;
-        } else if (comptime std.mem.eql(u8, build_options.model, "medium")) {
-            break :blk medium_model;
-        } else if (comptime std.mem.eql(u8, build_options.model, "large")) {
-            break :blk large_model;
-        } else if (comptime std.mem.eql(u8, build_options.model, "deep_1")) {
-            break :blk deep_model_1;
-        } else if (comptime std.mem.eql(u8, build_options.model, "deep_64")) {
-            break :blk deep_model_64;
-        } else if (comptime std.mem.eql(u8, build_options.model, "wide")) {
-            break :blk wide_model;
-        } else if (comptime std.mem.eql(u8, build_options.model, "hourglass")) {
-            break :blk hourglass_model;
-        } else if (comptime std.mem.eql(u8, build_options.model, "teepee")) {
-            break :blk teepee_model;
-        } else if (comptime std.mem.eql(u8, build_options.model, "deep_16")) {
-            break :blk deep_model_16;
-        } else {
-            @compileError("Unknown model" ++ build_options.model);
-        }
-    };
-    const batch = build_options.batch_size;
-    const iterations = build_options.iterations;
-    const runs = build_options.runs;
-    const seed = build_options.seed;
-    const write_out = build_options.write_out;
+    defer _ = gpa.deinit();    
     
     std.debug.print("OPTIMIZE={s}\n", .{@tagName(optimize)});
     switch (which) {
@@ -176,7 +181,7 @@ pub fn main() !void {
             std.debug.print("Running inference benchmark...\n" ++ "=" ** 50 ++ "\n", .{});
             // const zone = zt.ZoneNC(@src(), "inference", 0x00_FF_00_00 );
             // defer zone.End();
-            try benchmark_inference(gpa.allocator(), model, batch, iterations, runs, seed, write_out);
+            try benchmark_inference(gpa.allocator());
         },
         .ops => {
             @compileError("Not yet configured");
@@ -184,34 +189,34 @@ pub fn main() !void {
     }
 }
 
-fn inference_test(comptime model: ModelDef, comptime iterations: usize, comptime batch_size: usize, comptime seed: usize) f64 {
+const out_ct =  model_def[model_def.len-1][0];
+var output = Mat(out_ct, batch).create(0);
+
+
+fn inference_test(nn: *zffnn.NN(model_def, batch), iters: usize) f64 {
     // const zone = zt.ZoneNC(@src(), "inference test", 0x00_FF_00_99 );
     // defer zone.End();    
-    
-    const feature_ct = model[0][0];
-    var nn = zffnn.NN(model, batch_size).new();
     nn.random_init(seed);
-
+    
     var prng = std.Random.Xoshiro256.init(seed);
-    const input = Mat(batch_size, feature_ct).createRandom(&prng);
-
+    const input = Mat(feature_ct, batch).createRandom(&prng);
+    
     const start = std.time.nanoTimestamp();
-    for (0..iterations) |_| { // benchmark here
-        const output = nn.forward(input);
-        std.mem.doNotOptimizeAway(output);
+    for (0..iters) |_| { // benchmark here
+        nn.forward_(input, &output);
+        // std.mem.doNotOptimizeAway(output);
     }
     const end = std.time.nanoTimestamp();
-
     const total_ns: f64 = @floatFromInt(end - start);
     return total_ns;
 }
 
-fn benchmark_inference(allocator: std.mem.Allocator, comptime model: ModelDef, comptime batch: usize, comptime iterations: usize, comptime runs: usize, comptime seed: usize, write_out: bool) !void {
-    comptime var model_layer_bytes: [model.len-1]usize = .{0} ** (model.len - 1);
-    inline for (model[1..], 0..) |layer, i| {
-        model_layer_bytes[i] = @sizeOf(f32) * (layer[0] * model[i][0] + batch * (layer[0] + model[i][0]));
+fn benchmark_inference(allocator: std.mem.Allocator) !void {
+    comptime var model_layer_bytes: [model_def.len-1]usize = .{0} ** (model_def.len - 1);
+    inline for (model_def[1..], 0..) |layer, i| {
+        model_layer_bytes[i] = @sizeOf(f32) * (layer[0] * model_def[i][0] + batch * (layer[0] + model_def[i][0]));
     }
-    const model_str = try model2str(allocator, model, model_layer_bytes);
+    const model_str = try model2str(allocator, model_def, model_layer_bytes);
     defer allocator.free(model_str);
 
     var file: ?std.fs.File = null;
@@ -237,10 +242,10 @@ fn benchmark_inference(allocator: std.mem.Allocator, comptime model: ModelDef, c
 
     for (0..runs) |_| {
         // warm up
-        const out = inference_test(model, iterations / 10, batch, seed);
+        const out = inference_test(&net, iterations / 10);
         std.mem.doNotOptimizeAway(out);
 
-        const total_ns = inference_test(model, iterations, batch, seed);
+        const total_ns = inference_test(&net, iterations);
         // const total_ns = benchmark_matmul(iterations, seed);
         total_time_elapsed += total_ns / std.time.ns_per_s;
 
@@ -272,18 +277,20 @@ fn benchmark_inference(allocator: std.mem.Allocator, comptime model: ModelDef, c
     if (file) |f| {
         var buf: [2048]u8 = undefined;
         const csv_fmt = "{s},{d},{any},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2}\n";
-        const csv_line = try std.fmt.bufPrint(&buf, csv_fmt, .{ model_str, param_ct(model), optimize, batch, min_latency_ns, avg_latency_ns, max_latency_ns, min_throughput, avg_throughput, max_throughput });
+        const csv_line = try std.fmt.bufPrint(&buf, csv_fmt, .{ model_str, param_ct(model_def), optimize, batch, min_latency_ns, avg_latency_ns, max_latency_ns, min_throughput, avg_throughput, max_throughput });
         try f.writeAll(csv_line);
     }
 }
 
-fn benchmark_matmul(comptime iterations: usize, comptime seed: usize) f64 {
+
+fn benchmark_matmul(comptime iters: usize) f64 {
     var prng = std.Random.Xoshiro256.init(seed);
     const a = Mat(16, 32).createRandom(&prng);
     const b = Mat(32, 64).createRandom(&prng);
 
+
     const start = std.time.nanoTimestamp();
-    for (0..iterations) |_| {
+    for (0..iters) |_| {
         const c = a.mul(b);
         std.mem.doNotOptimizeAway(c);
     }
