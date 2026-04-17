@@ -1,6 +1,7 @@
 const std = @import("std");
 const validation = @import("validation.zig");
 const print = std.debug.print;
+const as_arr = @import("helpers.zig").as_arr;
 
 pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
     return struct {
@@ -82,39 +83,43 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         }
 
         pub fn get_tile(self: *const This, row_i: usize, start: usize) TiledRow {
-            const row = self.data[row_i];
             const end = @min(start + tile_width, m);
-            var tile: TiledRow = @splat(0);
+            
+            var tile_arr = as_arr(TiledRow, @splat(0));
             // std.debug.print("get_tile: row_i={d} start={d} end={d}\n", .{row_i, start, end});
-            for (start..end) |i| {
-                tile[i - start] = row[i];
+            for (&tile_arr, start..end) |*elem, i| {
+                elem.* = as_arr(Row, self.data[row_i])[i];
             }
-            return tile;
+            return tile_arr;
         }
 
         pub fn load_tile(self: *This, row_i: usize, start: usize, tile: TiledRow) void {
-            var row = &self.data[row_i];
+            var arr = as_arr(Row, self.data[row_i]);
             const end = @min(start + tile_width, m);
             // std.debug.print("load_tile: row_i={d} start={d} end={d}\n", .{row_i, start, end});
             for (start..end) |i| {
-                row[i] = tile[i - start];
+                arr[i] = as_arr(TiledRow, tile)[i - start];
             }
+            self.data[row_i] = arr;
         }
 
         pub inline fn set(self: *This, row: usize, col: usize, val: f32) void {
-            self.data[row][col] = val;
+            var arr = as_arr(Row, self.data[row]);
+            arr[col] = val;
+            self.data[row] = arr;
         }
 
         pub inline fn get(self: *const This, row: usize, col: usize) f32 {
-            return self.data[row][col];
+            return as_arr(Row, self.data[row])[col];
         }
 
         pub fn random_fill(mat: *This, rand: std.Random) void {
             for (&mat.data) |*row| {
-                var i: usize = 0;
-                while (i < m) : (i += 1) {
-                    row[i] = random_normalized_float(rand);
+                var arr = as_arr(Row, row.*);
+                for (&arr) |*elem| {
+                    elem.* = random_normalized_float(rand);
                 }
+                row.* = arr;
             }
         }
 
@@ -153,11 +158,11 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         }
 
         pub fn sum_rwise(mat: *const This) @Vector(n, f32) {
-            var out: @Vector(n, f32) = @splat(0);
+            var out_arr = as_arr(Col, @splat(0));
             for (0..n) |i| {
-                out[i] = sum_vec(mat.data[i]);
+                out_arr[i] = sum_vec(mat.data[i]);
             }
-            return out;
+            return out_arr;
         }
 
         pub fn sum_cwise(mat: *const This) @Vector(m, f32) {
@@ -266,7 +271,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             var out = Mat(n, @TypeOf(b.*).m).create(0);
             for (0..n) |row| {
                 for (0..m) |col| { // broadcasts the row of A to each column of B and sums their product to the output
-                    out.data[row] += @as(@TypeOf(out.data[row]), @splat(a.data[row][col])) * b.data[col];
+                    out.data[row] += @as(@TypeOf(out.data[row]), @splat(as_arr(Row, a.data[row])[col])) * b.data[col];
                 }
             }
             return out;
@@ -276,11 +281,11 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             var out = Mat(n, @TypeOf(b.*).m).create(0);
             const b_t = b.t();
             for (0..n) |row| {
-                var out_row: @TypeOf(b.*).Row = undefined;
+                var out_arr = as_arr(@TypeOf(b.*).Row, out.data[row]);
                 for (0..@TypeOf(b.*).m) |col| {
-                    out_row[col] = dot(m, a.data[row], b_t.data[col]);
+                    out_arr[col] = dot(m, a.data[row], b_t.data[col]);
                 }
-                out.data[row] = out_row;
+                out.data[row] = out_arr;
             }
             return out;
         }
@@ -313,7 +318,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
                 while (k < m) : (k += 1) {
                     var rr = _r;
                     while (rr < r_end) : (rr += 1) {
-                        accs[rr - _r] += @as(@TypeOf(b.*).Row, @splat(a.data[rr][k])) * b.data[k];
+                        accs[rr - _r] += @as(@TypeOf(b.*).Row, @splat(as_arr(Row, a.data[rr])[k])) * b.data[k];
                     }
                 }
                 var rr = _r;
@@ -341,7 +346,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
                         const b_tile: @TypeOf(b.*).TiledRow = b.get_tile(_k, j);
                         var rr = _r;
                         while (rr < r_end) : (rr += 1) {
-                            accs[rr - _r] += @as(@TypeOf(b.*).TiledRow, @splat(a.data[rr][_k])) * b_tile;
+                            accs[rr - _r] += @as(@TypeOf(b.*).TiledRow, @splat(as_arr(Row, a.data[rr])[_k])) * b_tile;
                         }
                     }
                     var rr = _r;
@@ -356,7 +361,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             out.clear();
             for (0..n) |row| {
                 for (0..m) |col| { // broadcasts the row of A to each column of B and sums their product to the output
-                    out.data[row] += @as(@TypeOf(b.*).Row, @splat(a.data[row][col])) * b.data[col];
+                    out.data[row] += @as(@TypeOf(b.*).Row, @splat(as_arr(Row, a.data[row])[col])) * b.data[col];
                 }
             }
         }

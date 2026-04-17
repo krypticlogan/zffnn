@@ -1,5 +1,4 @@
 const std = @import("std");
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -58,37 +57,37 @@ pub fn build(b: *std.Build) void {
     benchmark_opts.addOption(usize, "seed", seed_cli);
     benchmark_opts.addOption(bool, "write_out", write_out_cli);
 
-    const tracy_opts = .{
-        .enable_ztracy = b.option(
-            bool,
-            "enable_ztracy",
-            "Enable Tracy profile markers",
-        ) orelse false,
-        .enable_fibers = b.option(
-            bool,
-            "enable_fibers",
-            "Enable Tracy fiber support",
-        ) orelse false,
-        .on_demand = b.option(
-            bool,
-            "on_demand",
-            "Build tracy with TRACY_ON_DEMAND",
-        ) orelse false,
-    };
+    // const tracy_opts = .{
+    //     .enable_ztracy = b.option(
+    //         bool,
+    //         "enable_ztracy",
+    //         "Enable Tracy profile markers",
+    //     ) orelse false,
+    //     .enable_fibers = b.option(
+    //         bool,
+    //         "enable_fibers",
+    //         "Enable Tracy fiber support",
+    //     ) orelse false,
+    //     .on_demand = b.option(
+    //         bool,
+    //         "on_demand",
+    //         "Build tracy with TRACY_ON_DEMAND",
+    //     ) orelse false,
+    // };
 
-    const ztracy_dep = b.dependency("ztracy", .{
-        .enable_ztracy = tracy_opts.enable_ztracy,
-        .enable_fibers = tracy_opts.enable_fibers,
-        .on_demand = tracy_opts.on_demand,
-    });
+    // const ztracy_dep = b.dependency("ztracy", .{
+    //     .enable_ztracy = tracy_opts.enable_ztracy,
+    //     .enable_fibers = tracy_opts.enable_fibers,
+    //     .on_demand = tracy_opts.on_demand,
+    // });
 
     const benchmark_mod = b.addModule("zffnn_benchmarks", .{
         .root_source_file = b.path("benchmarks/benchmark.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &.{
-            .{ .name = "ztracy", .module = ztracy_dep.module("root") },
-        },
+        // .imports = &.{
+        //     .{ .name = "ztracy", .module = ztracy_dep.module("root") },
+        // },
     });
 
     benchmark_mod.addImport("zffnn", root_mod);
@@ -97,7 +96,7 @@ pub fn build(b: *std.Build) void {
         .name = "benchmark",
         .root_module = benchmark_mod,
     });
-    benchmark.linkLibrary(ztracy_dep.artifact("tracy"));
+    // benchmark.linkLibrary(ztracy_dep.artifact("tracy"));
 
     b.installArtifact(benchmark);
 

@@ -1,4 +1,6 @@
 const std = @import("std");
+const as_arr = @import("helpers.zig").as_arr;
+
 pub const Activation = union(enum(u8)) {
     none,
     relu,
@@ -74,7 +76,7 @@ pub fn single_softmax(mat: anytype) void {
     const e_mat = temp.exp();
     const e_sum = e_mat.sum_rwise();
     for (0..temp.rows()) |i| {
-        const inv = 1.0 / e_sum[i];
+        const inv = 1.0 / as_arr(@TypeOf(temp).Col, e_sum)[i];
         temp.data[i] = e_mat.data[i] * @as(@Vector(@TypeOf(mat.*).n, f32), @splat(inv));
     }
     // transpose the output again to retain correct shape
