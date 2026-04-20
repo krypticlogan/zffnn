@@ -1,14 +1,9 @@
 const std = @import("std");
 const codegen = @import("embedding.zig");
 
-pub fn main() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
-    const allocator = gpa.allocator();
-
-    var args = try std.process.argsWithAllocator(allocator);
-    defer args.deinit();
-
+pub fn main(init: std.process.Init) !void {
+    const gpa = init.gpa;
+    var args = try init.minimal.args.iterateAllocator(gpa);
     _ = args.skip(); // argv[0]
 
     const layer_count_str = args.next() orelse return error.MissingLayerCount;
@@ -19,7 +14,8 @@ pub fn main() !void {
     const layer_count = try std.fmt.parseInt(usize, layer_count_str, 10);
 
     try codegen.writeEmbeddedParamsBundle(
-        allocator,
+        init.io,
+        gpa,
         embed_file_name,
         input_dir,
         output_dir,
