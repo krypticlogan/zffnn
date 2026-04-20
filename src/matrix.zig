@@ -82,7 +82,7 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
             return col;
         }
 
-        pub fn get_tile(self: *const This, row_i: usize, start: usize) TiledRow {
+        pub fn get_tile(self: *const This, row_i: usize, start: usize) TiledRow { // todo: make this comptime scoped?
             const end = @min(start + tile_width, m);
             
             var tile_arr = as_arr(TiledRow, @splat(0));
@@ -270,8 +270,9 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         fn batch_mul(a: *const This, b: anytype) Mat(n, @TypeOf(b.*).m) {
             var out = Mat(n, @TypeOf(b.*).m).create(0);
             for (0..n) |row| {
+                const a_row = as_arr(Row, a.data[row]);
                 for (0..m) |col| { // broadcasts the row of A to each column of B and sums their product to the output
-                    out.data[row] += @as(@TypeOf(out.data[row]), @splat(as_arr(Row, a.data[row])[col])) * b.data[col];
+                    out.data[row] += @as(@TypeOf(out.data[row]), @splat(a_row[col])) * b.data[col];
                 }
             }
             return out;
@@ -360,8 +361,9 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         pub fn batch_mul_(a: *const This, b: anytype, out: *Mat(n, @TypeOf(b.*).m)) void {
             out.clear();
             for (0..n) |row| {
+                const a_row = as_arr(Row, a.data[row]);
                 for (0..m) |col| { // broadcasts the row of A to each column of B and sums their product to the output
-                    out.data[row] += @as(@TypeOf(b.*).Row, @splat(as_arr(Row, a.data[row])[col])) * b.data[col];
+                    out.data[row] += @as(@TypeOf(b.*).Row, @splat(a_row[col])) * b.data[col];
                 }
             }
         }

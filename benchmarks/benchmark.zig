@@ -175,9 +175,7 @@ const clock = std.Io.Clock.awake;
 
 pub fn main(init: std.process.Init) !void {
     const gpa = init.gpa;
-    const io = init.io;
-    
-    // defer _ = gpa.deinit();    
+    const io = init.io; 
     
     std.debug.print("OPTIMIZE={s}\n", .{@tagName(optimize)});
     switch (which) {
