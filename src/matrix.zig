@@ -279,11 +279,12 @@ pub fn Mat(comptime row_ct: usize, comptime col_ct: usize) type {
         }
 
         fn single_mul(a: *const This, b: anytype) Mat(n, @TypeOf(b.*).m) { // fast path todo: room for improvement probably
-            var out = Mat(n, @TypeOf(b.*).m).create(0);
+            const b_m = @TypeOf(b.*).m;
+            var out = Mat(n, b_m).create(0);
             const b_t = b.t();
             for (0..n) |row| {
-                var out_arr = as_arr(@TypeOf(b.*).Row, out.data[row]);
-                for (0..@TypeOf(b.*).m) |col| {
+                var out_arr: [b_m]f32 = undefined;
+                for (0..b_m) |col| {
                     out_arr[col] = dot(m, a.data[row], b_t.data[col]);
                 }
                 out.data[row] = out_arr;

@@ -43,8 +43,6 @@ pub fn build(b: *std.Build) void {
     const benchmark_cli = b.option([]const u8, "benchmark", "Benchmark to run: inference|batch_sweep|ops") orelse "inference";
     const model_cli = b.option([]const u8, "model", "Model size: small|medium|large") orelse "small";
     const batch_size_cli = b.option(usize, "batch_size", "Batch size") orelse 1;
-    const iterations_cli = b.option(usize, "iterations", "Iterations per run") orelse 20_000;
-    const runs_cli = b.option(usize, "runs", "Runs per model") orelse 3;
     const seed_cli = b.option(usize, "seed", "PRNG seed") orelse 1234;
     const write_out_cli = b.option(bool, "write_out", "Write CSV output") orelse false;
 
@@ -52,35 +50,12 @@ pub fn build(b: *std.Build) void {
     benchmark_opts.addOption([]const u8, "benchmark", benchmark_cli);
     benchmark_opts.addOption([]const u8, "model", model_cli);
     benchmark_opts.addOption(usize, "batch_size", batch_size_cli);
-    benchmark_opts.addOption(usize, "iterations", iterations_cli);
-    benchmark_opts.addOption(usize, "runs", runs_cli);
     benchmark_opts.addOption(usize, "seed", seed_cli);
     benchmark_opts.addOption(bool, "write_out", write_out_cli);
 
-    // const tracy_opts = .{
-    //     .enable_ztracy = b.option(
-    //         bool,
-    //         "enable_ztracy",
-    //         "Enable Tracy profile markers",
-    //     ) orelse false,
-    //     .enable_fibers = b.option(
-    //         bool,
-    //         "enable_fibers",
-    //         "Enable Tracy fiber support",
-    //     ) orelse false,
-    //     .on_demand = b.option(
-    //         bool,
-    //         "on_demand",
-    //         "Build tracy with TRACY_ON_DEMAND",
-    //     ) orelse false,
-    // };
-
-    // const ztracy_dep = b.dependency("ztracy", .{
-    //     .enable_ztracy = tracy_opts.enable_ztracy,
-    //     .enable_fibers = tracy_opts.enable_fibers,
-    //     .on_demand = tracy_opts.on_demand,
-    // });
-
+    const opts = .{ .target = target, .optimize = optimize };
+    const zbench_module = b.dependency("zbench", opts).module("zbench");
+    
     const benchmark_mod = b.addModule("zffnn_benchmarks", .{
         .root_source_file = b.path("benchmarks/benchmark.zig"),
         .target = target,
@@ -89,7 +64,8 @@ pub fn build(b: *std.Build) void {
         //     .{ .name = "ztracy", .module = ztracy_dep.module("root") },
         // },
     });
-
+    
+    benchmark_mod.addImport("zbench", zbench_module);
     benchmark_mod.addImport("zffnn", root_mod);
     benchmark_mod.addImport("build_options", benchmark_opts.createModule());
     const benchmark = b.addExecutable(.{

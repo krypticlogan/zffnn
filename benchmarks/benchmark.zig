@@ -162,142 +162,87 @@ const model_def: ModelDef = blk: {
     }
 };
 const batch = build_options.batch_size;
-const iterations = build_options.iterations;
-const runs = build_options.runs;
 const seed = build_options.seed;
 const write_out = build_options.write_out;
 
 const feature_ct = model_def[0][0];
-const Net = zffnn.NN(model_def, batch);
-var net = Net.new();
 
-const clock = std.Io.Clock.awake;
-
-pub fn main(init: std.process.Init) !void {
-    const gpa = init.gpa;
-    const io = init.io; 
-    
-    std.debug.print("OPTIMIZE={s}\n", .{@tagName(optimize)});
-    switch (which) {
-        .inference => {
-            std.debug.print("Running inference benchmark...\n" ++ "=" ** 50 ++ "\n", .{});
-            // const zone = zt.ZoneNC(@src(), "inference", 0x00_FF_00_00 );
-            // defer zone.End();
-            try benchmark_inference(gpa, io);
-        },
-        .ops => {
-            @compileError("Not yet configured");
-        },
-    }
-}
+const zbench = @import("zbench");
 
 const out_ct =  model_def[model_def.len-1][0];
-var output = Mat(out_ct, batch).create(0);
 
+const InferenceBench = struct {
+    const Net = zffnn.NN(model_def, batch);
+    var net = Net.new();
 
-fn inference_test(io: std.Io, nn: *zffnn.NN(model_def, batch), iters: usize) f64 {
-    // const zone = zt.ZoneNC(@src(), "inference test", 0x00_FF_00_99 );
-    // defer zone.End();    
-    nn.random_init(seed);
-    
-    var prng = std.Random.Xoshiro256.init(seed);
-    const input = Mat(feature_ct, batch).createRandom(&prng);
-
-    const start = clock.now(io).nanoseconds;
-    for (0..iters) |_| { // benchmark here
-        nn.forward_(input, &output);
-        // std.mem.doNotOptimizeAway(output);
+    input: Mat(feature_ct, batch),
+    output: Mat(out_ct, batch),
+    pub fn init() InferenceBench {
+       var prng: std.Random.Xoshiro256 = .init(seed);
+       net.random_init(seed);
+       return InferenceBench { .input = .createRandom(&prng),. output = .create(0) };
     }
-    const end = clock.now(io).nanoseconds;
-    const total_ns: f64 = @floatFromInt(end - start);
-    return total_ns;
-}
+  
+    pub fn run(self: *InferenceBench, _: std.mem.Allocator) void {  
+            const iters = 1000;
+            var i: usize = 0;
+            while (i < iters) : (i += 1) {
+                net.forward_(self.input, &self.output);
+                std.mem.doNotOptimizeAway(self.output);   
+            }
+    }
+};
 
-fn benchmark_inference(allocator: std.mem.Allocator, io: std.Io) !void {
+const MatMulBench = struct {
+    a: Mat(16, 8),
+    b: Mat(8, 24),
+    batched: bool = false,
+    
+    pub fn init(batched: bool) MatMulBench {
+       var prng: std.Random.Xoshiro256 = .init(seed);
+       return .{ 
+           .a = .createRandom(&prng),
+           .b = .createRandom(&prng),
+           .batched = batched,
+       };
+    }
+  
+    pub fn run(self: *MatMulBench, _: std.mem.Allocator) void {  
+        const iters = 1000;
+        var i: usize = 0;
+        while (i < iters) : (i += 1) {
+            const out = self.a.mul(&self.b, false);
+            std.mem.doNotOptimizeAway(out);   
+        }
+    }
+};
+
+pub fn main(init: std.process.Init) !void {
+    const io = init.io; 
+    const stdout: std.Io.File = .stdout();
+    
     comptime var model_layer_bytes: [model_def.len-1]usize = .{0} ** (model_def.len - 1);
     inline for (model_def[1..], 0..) |layer, i| {
         model_layer_bytes[i] = @sizeOf(f32) * (layer[0] * model_def[i][0] + batch * (layer[0] + model_def[i][0]));
     }
-    const model_str = try model2str(allocator, model_def, model_layer_bytes);
-    defer allocator.free(model_str);
+    const model_str = model2str(init.gpa, model_def, model_layer_bytes) catch {
+        return;
+    };
+    defer init.gpa.free(model_str);
 
-    var file: ?std.Io.File = null;
-    if (write_out) {
-        file = try std.Io.Dir.cwd().createFile(io, "benchmarks/zffnn_inference_benchmark.csv", .{ .truncate = false });
-        // try file.?.(0);
-    }
-    defer if (file) |f| f.close(io);
+    var bench = zbench.Benchmark.init(init.gpa, .{});
+    defer bench.deinit();
 
-    var total_time_elapsed: f64 = 0;
+    std.debug.print("Benchmarks | OPTIMIZE={s}\n", .{@tagName(optimize)});
 
-    var max_batch_latency_ns: f64 = 0;
-    var min_batch_latency_ns: f64 = @floatFromInt(std.math.maxInt(usize));
-    var total_batch_latency_ns: f64 = 0;
-
-    var max_latency_ns: f64 = 0;
-    var min_latency_ns: f64 = @floatFromInt(std.math.maxInt(usize));
-    var total_latency_ns: f64 = 0;
-
-    var max_throughput: f64 = 0;
-    var min_throughput: f64 = @floatFromInt(std.math.maxInt(usize));
-    var total_throughput: f64 = 0;
-
-    for (0..runs) |_| {
-        // warm up
-        const out = inference_test(io, &net, iterations / 10);
-        std.mem.doNotOptimizeAway(out);
-
-        const total_ns = inference_test(io, &net, iterations);
-        // const total_ns = benchmark_matmul(iterations, seed);
-        total_time_elapsed += total_ns / std.time.ns_per_s;
-
-        const batch_latency_ns = total_ns / iterations;
-        if (batch_latency_ns > max_batch_latency_ns) max_batch_latency_ns = batch_latency_ns;
-        if (batch_latency_ns < min_batch_latency_ns) min_batch_latency_ns = batch_latency_ns;
-        total_batch_latency_ns += batch_latency_ns;
-
-        const total_inferences = iterations * batch;
-
-        const latency_ns = total_ns / total_inferences;
-        if (latency_ns > max_latency_ns) max_latency_ns = latency_ns;
-        if (latency_ns < min_latency_ns) min_latency_ns = latency_ns;
-        total_latency_ns += latency_ns;
-
-        const inferences_per_sec = std.time.ns_per_s / latency_ns;
-        if (inferences_per_sec > max_throughput) max_throughput = inferences_per_sec;
-        if (inferences_per_sec < min_throughput) min_throughput = inferences_per_sec;
-        total_throughput += inferences_per_sec;
-    }
-
-    const avg_batch_latency_ns = total_batch_latency_ns / runs;
-    const avg_latency_ns = total_latency_ns / runs;
-    const avg_throughput = total_throughput / runs;
-
-    const benchmark_output_fmt = benchmark_summary ++ stat_summary ++ stat_summary ++ stat_summary;
-    std.debug.print(benchmark_output_fmt, .{ model_str, total_time_elapsed, runs, iterations, batch, "Latency (ns/inference)", min_latency_ns, avg_latency_ns, max_latency_ns, "Batch latency (ns/batch)", min_batch_latency_ns, avg_batch_latency_ns, max_batch_latency_ns, "Throughput (inferences/sec)", min_throughput, avg_throughput, max_throughput });
-    std.debug.print("________________________________\n\n", .{});
-    if (file) |f| {
-        var buf: [2048]u8 = undefined;
-        const csv_fmt = "{s},{d},{any},{d},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2},{d:.2}\n";
-        const csv_line = try std.fmt.bufPrint(&buf, csv_fmt, .{ model_str, param_ct(model_def), optimize, batch, min_latency_ns, avg_latency_ns, max_latency_ns, min_throughput, avg_throughput, max_throughput });
-        try f.writeStreamingAll(io, csv_line);
-    }
-}
-
-
-fn benchmark_matmul(comptime iters: usize) f64 {
-    var prng = std.Random.Xoshiro256.init(seed);
-    const a = Mat(16, 32).createRandom(&prng);
-    const b = Mat(32, 64).createRandom(&prng);
-
-
-    const start = std.time.nanoTimestamp();
-    for (0..iters) |_| {
-        const c = a.mul(b);
-        std.mem.doNotOptimizeAway(c);
-    }
-    const end = std.time.nanoTimestamp();
-
-    const total_ns: f64 = @floatFromInt(end - start);
-    return total_ns;
+    try bench.addParam("1k inference", &InferenceBench.init(), .{
+        .time_budget_ns = 5 * std.time.ns_per_s
+    });
+    try bench.addParam("1k MatMul (no batch)", &MatMulBench.init(false), .{
+        .time_budget_ns = 5 * std.time.ns_per_s
+    });
+    try bench.addParam("1k MatMul (batched)", &MatMulBench.init(true), .{
+        .time_budget_ns = 5 * std.time.ns_per_s
+    });
+    try bench.run(io, stdout);
 }
