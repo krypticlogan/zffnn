@@ -5,4 +5,5 @@ test {
     _ = @import("network.zig");
     _ = @import("network_validation.zig");
     _ = @import("meta.zig");
+    _ = @import("builder.zig");
 }

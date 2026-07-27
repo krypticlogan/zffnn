@@ -30,6 +30,22 @@ This document outlines the upgrade path for the library to support new architect
     - `Graph Builder` (generally for internal use, construction of tensor-based models)
     - `Operators` (compute operations, composition/control operations, view operations)
     - `Models` (predefined generators for particular types of models)
+
+  Model Pipeline
+  ---
+    Builder /
+       ↓
+    Graph /
+       ↓
+    Validation / lowering _
+       ↓
+    Memory and parameter plan
+       ↓
+    Executable Model type
+       ↓
+    Model instance
+       ↓
+    run() / forward()
     
     
   ## Optimization goals: (3 levels)
