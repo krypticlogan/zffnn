@@ -175,7 +175,7 @@ const InferenceBench = struct {
     const Net = zffnn.NN(model_def, batch);
     var net = Net.new();
 
-    input: Mat(feature_ct, batch),
+    input: Mat(batch, feature_ct),
     output: Mat(out_ct, batch),
     pub fn init() InferenceBench {
        var prng: std.Random.Xoshiro256 = .init(seed);

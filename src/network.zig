@@ -5,12 +5,14 @@ const Activation = @import("activations.zig").Activation;
 const Mat = @import("matrix.zig").Mat;
 const Layer = @import("layer.zig").Layer;
 const layer_role = @import("layer.zig").Role;
+const network_validation = @import("network_validation.zig");
 
 /// Generates a new network with the shape specified
 /// - The shape should be of a array type
 /// - The length of the tuple denotes the depth (number of layers) of the network
 /// - Each entry of the tuple denotes how many neurons per layer
 pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_size: usize) type {
+    comptime network_validation.assertValid(def, batch_size);
     @setEvalBranchQuota(2_000_000_000);
     const depth = def.len;
     comptime var layers: [depth]type = undefined;
@@ -81,11 +83,11 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
             if (b_bin.len != bias.rows() * bias.cols()) @compileError("Provided biases do not match the expected shape");
             for (0..weights.rows()) |i| {
                 const offset = i * weights.cols();
-                weights.data[i] = @as(@Vector(weights.cols(), f32), w_bin[offset .. offset + weights.cols()].*);
+                weights.data[i] = w_bin[offset .. offset + weights.cols()].*;
             }
             for (0..bias.rows()) |i| {
                 const offset = i * bias.cols();
-                bias.data[i] = @as(@Vector(bias.cols(), f32), b_bin[offset .. offset + bias.cols()].*);
+                bias.data[i] = b_bin[offset .. offset + bias.cols()].*;
             }
         }
 
@@ -97,8 +99,8 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
                 print("\n", .{});
             }
         }
-            
-    // todo: forward into
+
+        // todo: forward into
         pub fn forward(self: *@This(), input: Mat(batch_size, def[0][0])) Mat(def[depth - 1][0], batch_size) {
             self.layers[0].a = input.t();
             inline for (1..depth) |i| {
@@ -108,9 +110,9 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
             }
             return self.layers[depth - 1].a;
         }
-        
-        pub fn forward_(self: *@This(), input: Mat(def[0][0], batch_size), out: *Mat(def[depth - 1][0], batch_size)) void {
-            self.layers[0].a = input;
+
+        pub fn forward_(self: *@This(), input: Mat(batch_size, def[0][0]), out: *Mat(def[depth - 1][0], batch_size)) void {
+            self.layers[0].a = input.t();
             inline for (1..depth) |i| {
                 var layer = &self.layers[i];
                 const prev_out = self.layers[i - 1].a;
@@ -118,20 +120,5 @@ pub fn NN(comptime def: []const struct { usize, Activation }, comptime batch_siz
             }
             out.* = self.layers[depth - 1].a;
         }
-
-        //     var bar: [bar_size + 1]u8 = undefined;
-        //     bar[bar_size] = '|';
-        //     var iter: usize = 0;
-        //     while (iter < iterations + 1) : (iter+=1) {
-        //         // loading bar
-        //         const dist: usize = bar_size * iter / iterations;
-        //         for (0..bar_size) |i| {
-        //             bar[i] = if (i < dist) '*' else '-';
-        //         }
-        //         print("\riter {d}: {s}", .{iter, bar});
-        //         nn.forward();
-        //         // backprop
-        //     }
-
     };
 }

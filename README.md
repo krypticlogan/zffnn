@@ -216,6 +216,10 @@ All operations are:
 
 - Network structure is part of the type
 
+- Matrix data is stored as row-major arrays (`[rows][cols]f32`)
+
+- SIMD vectors are created at computation boundaries rather than used as storage
+
 ### Compiled binary contains:
 
 - model weights

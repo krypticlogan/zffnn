@@ -12,9 +12,6 @@
             .url = "git+https://github.com/krypticlogan/zffnn#fb05270b8fea30dc438ad0a62774ccce0d22cf2f",
             .hash = "zffnn-0.0.1-aXFkydJZAABWrBSw9_1xTFlzGCT7069tZdKFq34bi2Kt",
         },
-        // .zffnn = .{
-        //     .path = "../"
-        // },
     },
     .paths = .{
         "build.zig",

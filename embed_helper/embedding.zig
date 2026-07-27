@@ -21,13 +21,11 @@ pub fn writeEmbeddedParamsBundle(
     var zig_src: std.ArrayList(u8) = .empty;
     defer zig_src.deinit(allocator);
 
-    // const w = zig_src.writer(allocator);
-
     try zig_src.appendSlice(allocator, "pub const weights = [_][]const u8{\n");
     for (1..layer_count + 1) |i| {
         const src_name = try std.fmt.allocPrint(allocator, "w{d}.bin", .{i});
         defer allocator.free(src_name);
-        
+
         const line = try std.fmt.allocPrint(allocator, "    @embedFile(\"w{d}.bin\"),\n", .{i});
         defer allocator.free(line);
         try copyFileIntoDir(io, input_dir, output_dir, src_name);
@@ -39,15 +37,15 @@ pub fn writeEmbeddedParamsBundle(
     for (1..layer_count + 1) |i| {
         const src_name = try std.fmt.allocPrint(allocator, "b{d}.bin", .{i});
         defer allocator.free(src_name);
-        
+
         const line = try std.fmt.allocPrint(allocator, "    @embedFile(\"b{d}.bin\"),\n", .{i});
+        defer allocator.free(line);
         try copyFileIntoDir(io, input_dir, output_dir, src_name);
         try zig_src.appendSlice(allocator, line);
     }
     try zig_src.appendSlice(allocator, "};\n");
 
-    try output_dir.writeFile(io,
-        .{
+    try output_dir.writeFile(io, .{
         .sub_path = embed_file_name,
         .data = zig_src.items,
     });

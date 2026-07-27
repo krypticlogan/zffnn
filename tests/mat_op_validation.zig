@@ -52,6 +52,40 @@ test "mat mul batched" {
     try expect(c.data[1][1] == 154);
 }
 
+test "in-place single mat mul matches returning mat mul" {
+    var a = zffnn.Mat(2, 3).create(0);
+    a.load([_][3]f32{ .{ 1, 2, 3 }, .{ 4, 5, 6 } });
+    var b = zffnn.Mat(3, 2).create(0);
+    b.load([_][2]f32{
+        .{ 7, 8 },
+        .{ 9, 10 },
+        .{ 11, 12 },
+    });
+    const expected = a.mul(&b, false);
+
+    var actual = zffnn.Mat(2, 2).create(std.math.nan(f32));
+    a.mul_(&b, &actual, false);
+
+    try testing.expectEqualDeep(expected.data, actual.data);
+}
+
+test "in-place batched mat mul matches returning mat mul" {
+    var a = zffnn.Mat(2, 3).create(0);
+    a.load([_][3]f32{ .{ 1, 2, 3 }, .{ 4, 5, 6 } });
+    var b = zffnn.Mat(3, 2).create(0);
+    b.load([_][2]f32{
+        .{ 7, 8 },
+        .{ 9, 10 },
+        .{ 11, 12 },
+    });
+    const expected = a.mul(&b, true);
+
+    var actual = zffnn.Mat(2, 2).create(std.math.nan(f32));
+    a.mul_(&b, &actual, true);
+
+    try testing.expectEqualDeep(expected.data, actual.data);
+}
+
 test "full add" {
     var a = zffnn.Mat(2, 3).create(0);
     a.load([_][3]f32{
@@ -208,4 +242,74 @@ test "transpose" {
     try expect(c.data[1][1] == 5);
     try expect(c.data[2][0] == 3);
     try expect(c.data[2][1] == 6);
+}
+
+test "in-place elementwise operations match returning operations" {
+    var a = zffnn.Mat(2, 3).create(0);
+    a.load(.{
+        .{ -4, -3, -2 },
+        .{ -2, -1, 0 },
+    });
+    var full = zffnn.Mat(2, 3).create(0);
+    full.load(.{
+        .{ 1, 2, 3 },
+        .{ 4, 5, 6 },
+    });
+    var broadcast = zffnn.Mat(2, 1).create(0);
+    broadcast.load(.{
+        .{5},
+        .{6},
+    });
+
+    var actual = a.dupe_like(.clone);
+    const expected_full_add = a.add(full);
+    actual.add_(full);
+    try testing.expectEqualDeep(expected_full_add.data, actual.data);
+
+    actual = a.dupe_like(.clone);
+    const expected_broadcast_add = a.add(broadcast);
+    actual.add_(broadcast);
+    try testing.expectEqualDeep(expected_broadcast_add.data, actual.data);
+
+    actual = a.dupe_like(.clone);
+    const expected_full_sub = a.sub(full);
+    actual.sub_(full);
+    try testing.expectEqualDeep(expected_full_sub.data, actual.data);
+
+    actual = a.dupe_like(.clone);
+    const expected_broadcast_sub = a.sub(broadcast);
+    actual.sub_(broadcast);
+    try testing.expectEqualDeep(expected_broadcast_sub.data, actual.data);
+}
+
+test "row and column reductions handle negative values" {
+    var a = zffnn.Mat(2, 3).create(0);
+    a.load(.{
+        .{ -4, -8, -2 },
+        .{ -5, -3, -9 },
+    });
+
+    const row_max: [2]f32 = a.max_rwise();
+    try testing.expectEqualSlices(f32, &.{ -2, -3 }, &row_max);
+
+    const col_max: [3]f32 = a.max_cwise();
+    try testing.expectEqualSlices(f32, &.{ -4, -3, -2 }, &col_max);
+
+    const row_sum: [2]f32 = a.sum_rwise();
+    try testing.expectEqualSlices(f32, &.{ -14, -17 }, &row_sum);
+
+    const col_sum: [3]f32 = a.sum_cwise();
+    try testing.expectEqualSlices(f32, &.{ -9, -11, -11 }, &col_sum);
+}
+
+test "runtime scalar access reads and writes vector-backed rows" {
+    var a = zffnn.Mat(2, 3).create(0);
+
+    var row: usize = 0;
+    var col: usize = 1;
+    row += 1;
+    col += 1;
+
+    a.set(row, col, 42);
+    try testing.expectEqual(@as(f32, 42), a.get(row, col));
 }

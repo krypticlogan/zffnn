@@ -21,13 +21,32 @@ pub fn build(b: *std.Build) void {
     });
 
     // tests
+    const test_embed_params = b.createModule(.{
+        .root_source_file = b.path("tests/fixtures/embed_params.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    const test_root_mod = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_root_mod.addImport("embed_params", test_embed_params);
+
     const test_mod = b.addModule("zffnn_tests", .{
         .root_source_file = b.path("tests/tests.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    test_mod.addImport("zffnn", root_mod);
+    const embedding_codegen_mod = b.createModule(.{
+        .root_source_file = b.path("embed_helper/embedding.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    test_mod.addImport("zffnn", test_root_mod);
+    test_mod.addImport("embedding_codegen", embedding_codegen_mod);
 
     const tests = b.addTest(.{
         .root_module = test_mod,
@@ -55,16 +74,16 @@ pub fn build(b: *std.Build) void {
 
     const opts = .{ .target = target, .optimize = optimize };
     const zbench_module = b.dependency("zbench", opts).module("zbench");
-    
+
     const benchmark_mod = b.addModule("zffnn_benchmarks", .{
         .root_source_file = b.path("benchmarks/benchmark.zig"),
         .target = target,
         .optimize = optimize,
-        // .imports = &.{
-        //     .{ .name = "ztracy", .module = ztracy_dep.module("root") },
-        // },
+        .imports = &.{
+            .{ .name = "zbench", .module = zbench_module },
+        },
     });
-    
+
     benchmark_mod.addImport("zbench", zbench_module);
     benchmark_mod.addImport("zffnn", root_mod);
     benchmark_mod.addImport("build_options", benchmark_opts.createModule());
