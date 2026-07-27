@@ -1,11 +1,5 @@
 # ZFFNN — Compile-Time Feedforward Neural Networks in Zig
 
-## ***DEV CHANGES AND FINDINGS***
-
-- It is optimal to create the network at the global scope and keep it out of the main stack
-- changed the orientation of input data
-A statically-defined feedforward neural network library built using Zig's comptime system.
-
 Networks are fully constructed at compile time, with:
 - compile-time shape validation
 - zero heap allocation
