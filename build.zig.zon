@@ -1,5 +1,5 @@
 .{
-    .name = .zffnn,
+    .name = .zgc,
     .version = "0.0.1",
     .dependencies = .{
         .zbench = .{
@@ -7,6 +7,6 @@
             .hash = "zbench-0.13.0-YTdc71ZAAQCUJ0w9jM6ZyLOBxDlGv2j3CqCEj49l-KcP",
         },
     },
-    .fingerprint = 0x76231a48c9647169,
+    .fingerprint = 0x5820f916c3bb1bf2,
     .paths = .{ "build.zig", "build.zig.zon", "src", "embed_helper" },
 }

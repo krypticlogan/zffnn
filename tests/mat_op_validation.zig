@@ -4,12 +4,13 @@ const testing = std.testing;
 const expect = testing.expect;
 const approxEqAbs = testing.expectApproxEqAbs;
 
-const zffnn = @import("zffnn");
+const zgc = @import("zgc");
+const Mat = zgc.Extensions.Matrix;
 
 test "mat mul" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{ .{ 1, 2, 3 }, .{ 4, 5, 6 } });
-    var b = zffnn.Mat(3, 2).create(0);
+    var b = Mat(3, 2).create(0);
     b.load([_][2]f32{
         .{ 7, 8 },
         .{ 9, 10 },
@@ -30,9 +31,9 @@ test "mat mul" {
 }
 
 test "mat mul batched" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{ .{ 1, 2, 3 }, .{ 4, 5, 6 } });
-    var b = zffnn.Mat(3, 2).create(0);
+    var b = Mat(3, 2).create(0);
     b.load([_][2]f32{
         .{ 7, 8 },
         .{ 9, 10 },
@@ -53,9 +54,9 @@ test "mat mul batched" {
 }
 
 test "in-place single mat mul matches returning mat mul" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{ .{ 1, 2, 3 }, .{ 4, 5, 6 } });
-    var b = zffnn.Mat(3, 2).create(0);
+    var b = Mat(3, 2).create(0);
     b.load([_][2]f32{
         .{ 7, 8 },
         .{ 9, 10 },
@@ -63,16 +64,16 @@ test "in-place single mat mul matches returning mat mul" {
     });
     const expected = a.mul(&b, false);
 
-    var actual = zffnn.Mat(2, 2).create(std.math.nan(f32));
+    var actual = Mat(2, 2).create(std.math.nan(f32));
     a.mul_(&b, &actual, false);
 
     try testing.expectEqualDeep(expected.data, actual.data);
 }
 
 test "in-place batched mat mul matches returning mat mul" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{ .{ 1, 2, 3 }, .{ 4, 5, 6 } });
-    var b = zffnn.Mat(3, 2).create(0);
+    var b = Mat(3, 2).create(0);
     b.load([_][2]f32{
         .{ 7, 8 },
         .{ 9, 10 },
@@ -80,19 +81,19 @@ test "in-place batched mat mul matches returning mat mul" {
     });
     const expected = a.mul(&b, true);
 
-    var actual = zffnn.Mat(2, 2).create(std.math.nan(f32));
+    var actual = Mat(2, 2).create(std.math.nan(f32));
     a.mul_(&b, &actual, true);
 
     try testing.expectEqualDeep(expected.data, actual.data);
 }
 
 test "full add" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{
         .{ 1, 2, 3 },
         .{ 4, 5, 6 },
     });
-    var b = zffnn.Mat(2, 3).create(0);
+    var b = Mat(2, 3).create(0);
     b.load([_][3]f32{
         .{ 7, 8, 9 },
         .{ 10, 11, 12 },
@@ -113,12 +114,12 @@ test "full add" {
 }
 
 test "col-wise add" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{
         .{ -4, -3, -2 },
         .{ -2, -1, 0 },
     });
-    var b = zffnn.Mat(2, 1).create(0);
+    var b = Mat(2, 1).create(0);
     b.load([_][1]f32{
         .{5},
         .{6},
@@ -139,12 +140,12 @@ test "col-wise add" {
 }
 
 test "full sub" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{
         .{ 1, 2, 3 },
         .{ 4, 5, 6 },
     });
-    var b = zffnn.Mat(2, 3).create(0);
+    var b = Mat(2, 3).create(0);
     b.load([_][3]f32{
         .{ 7, 8, 9 },
         .{ 10, 11, 12 },
@@ -165,12 +166,12 @@ test "full sub" {
 }
 
 test "col-wise sub" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{
         .{ 4, 3, 2 },
         .{ 2, 1, 0 },
     });
-    var b = zffnn.Mat(2, 1).create(0);
+    var b = Mat(2, 1).create(0);
     b.load([_][1]f32{
         .{5},
         .{6},
@@ -191,7 +192,7 @@ test "col-wise sub" {
 }
 
 test "max_rwise" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{
         .{ 4, 3, 2 },
         .{ 2, 1, 0 },
@@ -202,7 +203,7 @@ test "max_rwise" {
 }
 
 test "max_cwise" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{
         .{ 4, 3, 2 },
         .{ 2, 1, 0 },
@@ -214,7 +215,7 @@ test "max_cwise" {
 }
 
 test "exp" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{
         .{ 1, 2, 3 },
         .{ 4, 5, 6 },
@@ -230,7 +231,7 @@ test "exp" {
 }
 
 test "transpose" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load([_][3]f32{
         .{ 1, 2, 3 },
         .{ 4, 5, 6 },
@@ -245,17 +246,17 @@ test "transpose" {
 }
 
 test "in-place elementwise operations match returning operations" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load(.{
         .{ -4, -3, -2 },
         .{ -2, -1, 0 },
     });
-    var full = zffnn.Mat(2, 3).create(0);
+    var full = Mat(2, 3).create(0);
     full.load(.{
         .{ 1, 2, 3 },
         .{ 4, 5, 6 },
     });
-    var broadcast = zffnn.Mat(2, 1).create(0);
+    var broadcast = Mat(2, 1).create(0);
     broadcast.load(.{
         .{5},
         .{6},
@@ -283,7 +284,7 @@ test "in-place elementwise operations match returning operations" {
 }
 
 test "row and column reductions handle negative values" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
     a.load(.{
         .{ -4, -8, -2 },
         .{ -5, -3, -9 },
@@ -303,7 +304,7 @@ test "row and column reductions handle negative values" {
 }
 
 test "runtime scalar access reads and writes vector-backed rows" {
-    var a = zffnn.Mat(2, 3).create(0);
+    var a = Mat(2, 3).create(0);
 
     var row: usize = 0;
     var col: usize = 1;

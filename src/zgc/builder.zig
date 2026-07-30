@@ -1,10 +1,23 @@
 const std = @import("std");
 const Tensor = @import("tensor.zig");
-const Dtype = @import("dtype.zig").Dtype;
-const Shape = Tensor.Shape;
+const Dtype = @import("storage.zig").Dtype;
+const Shape_T = Tensor.Shape_T;
+
+pub const Source = struct {
+    kind: Kind,
+    tensor: Tensor.Id,
+    binding: Binding,
+
+    pub const Kind = enum { input, parameter, constant, state };
+
+    pub const Binding = enum {
+        embed,
+    };
+};
 
 pub const NodeType = enum { compute, view, source, output };
 
+/// Defines a node of a graph, retains info about the node
 pub const Node = struct {
     pub const Id = usize;
     op: Op,
@@ -13,6 +26,7 @@ pub const Node = struct {
     result: Tensor.Id,
 };
 
+/// Operations for nodes
 pub const Op = union(enum) {
     relu,
     add,
@@ -22,6 +36,43 @@ pub const Op = union(enum) {
 
     pub const SoftmaxAttrs = struct { axis: i8 };
     pub const TransposeAttrs = struct { axis_a: i8, axis_b: i8 };
+
+    pub fn inferRank(op: Op, inputs: anytype) usize {
+        return switch (op) {
+            .relu, .softmax, .transpose => inputs[0].rank,
+            .add => @max(inputs[0].rank, inputs[1].rank),
+            .matmul => 2,
+        };
+    }
+
+    pub fn inferShape(
+        comptime op: Op,
+        comptime inputs: anytype,
+        comptime max_rank: usize,
+    ) Tensor.Shape(max_rank) {
+        return switch (op) {
+            .relu, .softmax => inputs[0].shape,
+            .add => if (inputs[0].shape.rank >= inputs[1].shape.rank)
+                inputs[0].shape
+            else
+                inputs[1].shape,
+            .matmul => Tensor.Shape(max_rank).init(&.{
+                inputs[0].shape.at(0),
+                inputs[1].shape.at(1),
+            }),
+            .transpose => |attrs| blk: {
+                var shape = inputs[0].shape;
+                const axis_a: usize = @intCast(attrs.axis_a);
+                const axis_b: usize = @intCast(attrs.axis_b);
+                std.mem.swap(
+                    usize,
+                    &shape.dims[axis_a],
+                    &shape.dims[axis_b],
+                );
+                break :blk shape;
+            },
+        };
+    }
 
     pub fn debugPrint(op: Op) void {
         switch (op) {
@@ -41,67 +92,71 @@ pub const Op = union(enum) {
     }
 };
 
-pub const Value = struct {
+/// Intermediate / Internal Graph type
+pub fn Value(comptime max_rank: usize) type {
+    return struct {
+        id: Tensor.Id,
+        dtype: Dtype,
+        shape: Tensor.Shape(max_rank),
+
+        pub fn debugPrint(value: @This()) void {
+            std.debug.print(
+                "t{d}: {s} shape=",
+                .{ value.id, @tagName(value.dtype) },
+            );
+            Tensor.debugPrintShape(&value.shape);
+            std.debug.print("\n", .{});
+        }
+    };
+}
+
+const CountingValue = struct {
     id: Tensor.Id,
     dtype: Dtype,
-    shape: Shape,
-
-    pub fn debugPrint(value: Value) void {
-        std.debug.print(
-            "t{d}: {s} shape=",
-            .{ value.id, @tagName(value.dtype) },
-        );
-        Tensor.debugPrintShape(&value.shape);
-        std.debug.print("\n", .{});
-    }
+    rank: usize,
 };
 
+/// Builder that recieves a backend (Graph / Counting) supports building a model.
+/// Either begin with the `GraphBackend` and supply maximum counts yourself, or use the `CountingBackend` to compute maximums to be supplied to the `GraphBackend`.
 pub fn Builder(comptime Backend: type) type {
     return struct {
+        const ValueType = Backend.ValueType;
         backend: *Backend,
         const Self = @This();
 
-        pub fn input(self: *Self, dtype: Dtype, shape: []const usize) Value {
-            return (self.backend.addSource(.{
-                .dtype = dtype,
-                .shape = .init(shape),
-            }));
+        pub fn input(
+            self: *Self,
+            comptime dtype: Dtype,
+            comptime shape: Shape_T,
+        ) ValueType {
+            return self.backend.addSource(.input, dtype, shape);
         }
 
-        pub fn parameter(self: *Self, dtype: Dtype, shape: []const usize) Value {
-            return (self.backend.addSource(.{
-                .dtype = dtype,
-                .shape = .init(shape),
-            }));
+        pub fn parameter(
+            self: *Self,
+            comptime dtype: Dtype,
+            comptime shape: Shape_T,
+        ) ValueType {
+            return self.backend.addSource(.parameter, dtype, shape);
         }
 
-        pub fn constant(self: *Self, dtype: Dtype, shape: []const usize) Value {
-            return (self.backend.addSource(.{
-                .dtype = dtype,
-                .shape = .init(shape),
-            }));
+        pub fn constant(
+            self: *Self,
+            comptime dtype: Dtype,
+            comptime shape: Shape_T,
+        ) ValueType {
+            return self.backend.addSource(.constant, dtype, shape);
         }
 
-        pub fn matmul(self: *Self, lhs: Value, rhs: Value) Value {
-            // const output_info = inferMatmul(lhs, rhs); // tensor info
-            const output_info = Tensor.Info{
-                .dtype = lhs.dtype,
-                .producer = self.backend.graph.node_ct,
-                .shape = .init(&.{ lhs.shape.at(0), rhs.shape.at(1) }),
-            };
-            return self.backend.addNode(.matmul, &.{ lhs, rhs }, output_info);
+        pub fn matmul(self: *Self, comptime lhs: ValueType, comptime rhs: ValueType) ValueType {
+            return self.backend.addNode(.matmul, &.{ lhs, rhs });
         }
 
-        pub fn relu(self: *Self, input_ref: Value) Value {
-            const output_info = Tensor.Info{
-                .dtype = input_ref.dtype,
-                .shape = input_ref.shape,
-            };
-
-            return self.backend.addNode(.relu, &.{input_ref}, output_info);
+        pub fn relu(self: *Self, comptime input_ref: ValueType) ValueType {
+            return self.backend.addNode(.relu, &.{input_ref});
         }
 
-        pub fn output(self: *Self, value: Value) void {
+        pub fn output(self: *Self, comptime value: ValueType) void {
             self.backend.markOutput(value);
         }
     };
@@ -112,15 +167,17 @@ pub const GraphCapacity = struct {
     max_input_refs: usize = 0,
     max_tensors: usize = 0,
     max_outputs: usize = 0,
+    max_rank: usize = 0,
 
     pub fn debugPrint(capacity: GraphCapacity) void {
         std.debug.print(
-            "GraphCapacity(nodes={d}, input_refs={d}, tensors={d}, outputs={d})\n",
+            "GraphCapacity(nodes={d}, input_refs={d}, tensors={d}, outputs={d}, rank={d})\n",
             .{
                 capacity.max_nodes,
                 capacity.max_input_refs,
                 capacity.max_tensors,
                 capacity.max_outputs,
+                capacity.max_rank,
             },
         );
     }
@@ -128,9 +185,11 @@ pub const GraphCapacity = struct {
 pub fn Graph(capacity: GraphCapacity) type {
     return struct {
         const Self = @This();
+        pub const max_rank = capacity.max_rank;
+        pub const TensorInfo = Tensor.Info(max_rank);
 
         nodes: [capacity.max_nodes]?Node = .{null} ** capacity.max_nodes,
-        tensors: [capacity.max_tensors]?Tensor.Info = .{null} ** capacity.max_tensors,
+        tensors: [capacity.max_tensors]?TensorInfo = .{null} ** capacity.max_tensors,
         input_refs: [capacity.max_input_refs]?Tensor.Id = .{null} ** capacity.max_input_refs,
         outputs: [capacity.max_outputs]?Tensor.Id = .{null} ** capacity.max_outputs,
 
@@ -148,7 +207,7 @@ pub fn Graph(capacity: GraphCapacity) type {
             g.node_ct += 1;
         }
 
-        pub fn insertTensor(g: *Self, info: Tensor.Info) Tensor.Id {
+        pub fn insertTensor(g: *Self, info: TensorInfo) Tensor.Id {
             const id = g.tensor_ct;
             g.tensors[id] = info;
             g.tensor_ct += 1;
@@ -255,9 +314,17 @@ pub fn Graph(capacity: GraphCapacity) type {
             Tensor.debugPrintShape(&info.shape);
             std.debug.print("]", .{});
 
-            const producer_id = info.producer orelse {
-                std.debug.print(" (source)\n", .{});
-                return;
+            // const producer_id = info.origin.node else {
+            //
+            //     return;
+            // };
+            //
+            const producer_id = switch (info.origin) {
+                .node => info.origin.node,
+                .source => {
+                    std.debug.print(" (source)={s}\n", .{@tagName(info.origin.source)});
+                    return;
+                },
             };
 
             if (producer_id >= g.node_ct or g.nodes[producer_id] == null) {
@@ -319,6 +386,9 @@ pub fn Graph(capacity: GraphCapacity) type {
 pub fn GraphBackend(comptime capacities: GraphCapacity) type {
     return struct {
         const Self = @This();
+        pub const max_rank = capacities.max_rank;
+        const TensorInfo = Tensor.Info(max_rank);
+        pub const ValueType = Value(max_rank);
         graph: Graph(capacities) = .init(),
 
         pub fn init() Self {
@@ -335,8 +405,15 @@ pub fn GraphBackend(comptime capacities: GraphCapacity) type {
 
         pub fn addSource( // add tensor info to graph.inputs
             self: *Self,
-            info: Tensor.Info,
-        ) Value {
+            comptime kind: Source.Kind,
+            comptime dtype: Dtype,
+            comptime shape: Shape_T,
+        ) ValueType {
+            const info = TensorInfo{
+                .dtype = dtype,
+                .shape = .init(shape),
+                .origin = .{ .source = kind },
+            };
             const id = self.graph.insertTensor(info);
             return .{
                 .id = @intCast(id),
@@ -347,13 +424,16 @@ pub fn GraphBackend(comptime capacities: GraphCapacity) type {
 
         pub fn addNode(
             self: *@This(),
-            op: Op,
-            inputs: []const Value,
-            output: Tensor.Info,
-        ) Value {
+            comptime op: Op,
+            comptime inputs: []const ValueType,
+        ) ValueType {
             const node_id = self.nextNodeID();
-            var result_info = output;
-            result_info.producer = node_id;
+            const result_shape = op.inferShape(inputs, max_rank);
+            const result_info = TensorInfo{
+                .dtype = inputs[0].dtype,
+                .shape = result_shape,
+                .origin = .{ .node = node_id },
+            };
             const result_id = self.graph.insertTensor(result_info);
 
             for (inputs) |input| {
@@ -369,12 +449,12 @@ pub fn GraphBackend(comptime capacities: GraphCapacity) type {
 
             return .{
                 .id = @intCast(result_id),
-                .dtype = output.dtype,
-                .shape = output.shape,
+                .dtype = result_info.dtype,
+                .shape = result_info.shape,
             };
         }
 
-        pub fn markOutput(self: *@This(), value: Value) void {
+        pub fn markOutput(self: *@This(), value: ValueType) void {
             self.graph.insertOutput(value.id);
         }
 
@@ -385,46 +465,54 @@ pub fn GraphBackend(comptime capacities: GraphCapacity) type {
 }
 
 pub const CapacityCountingBackend = struct {
+    const Self = @This();
+    pub const ValueType = CountingValue;
+
     counts: GraphCapacity = .{},
     graph: struct { node_ct: usize } = .{ .node_ct = 0 },
 
     pub fn addSource(
-        self: *@This(),
-        info: Tensor.Info,
-    ) Value {
+        self: *Self,
+        comptime kind: Source.Kind,
+        comptime dtype: Dtype,
+        comptime shape: Shape_T,
+    ) ValueType {
+        _ = kind;
+
         const id = self.counts.max_tensors;
         self.counts.max_tensors += 1;
+        self.counts.max_rank = @max(self.counts.max_rank, shape.len);
 
         return .{
             .id = @intCast(id),
-            .dtype = info.dtype,
-            .shape = info.shape,
+            .dtype = dtype,
+            .rank = shape.len,
         };
     }
 
     pub fn addNode(
-        self: *@This(),
+        self: *Self,
         op: Op,
-        inputs: []const Value,
-        output: Tensor.Info,
-    ) Value {
-        _ = op;
+        inputs: []const ValueType,
+    ) ValueType {
+        const output_rank = op.inferRank(inputs);
 
         self.counts.max_nodes += 1;
         self.graph.node_ct += 1;
         self.counts.max_input_refs += inputs.len;
+        self.counts.max_rank = @max(self.counts.max_rank, output_rank);
 
         const id = self.counts.max_tensors;
         self.counts.max_tensors += 1;
 
         return .{
             .id = @intCast(id),
-            .dtype = output.dtype,
-            .shape = output.shape,
+            .dtype = inputs[0].dtype,
+            .rank = output_rank,
         };
     }
 
-    pub fn markOutput(self: *@This(), value: Value) void {
+    pub fn markOutput(self: *Self, value: ValueType) void {
         _ = value;
         self.counts.max_outputs += 1;
     }

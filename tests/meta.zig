@@ -2,10 +2,13 @@ const std = @import("std");
 const testing = std.testing;
 
 const embedding_codegen = @import("embedding_codegen");
-const zffnn = @import("zffnn");
+const zgc = @import("zgc");
+const Activation = zgc.Extensions.Activation;
+const Mat = zgc.Extensions.Matrix;
+const NN = zgc.Extensions.NN;
 
 test "matrix and network types retain their compile-time shape metadata" {
-    const Matrix = zffnn.Mat(3, 5);
+    const Matrix = Mat(3, 5);
     try testing.expectEqual(@as(usize, 3), Matrix.n);
     try testing.expectEqual(@as(usize, 5), Matrix.m);
     try testing.expectEqual([5]f32, Matrix.Row);
@@ -14,12 +17,12 @@ test "matrix and network types retain their compile-time shape metadata" {
     try testing.expectEqual(@Vector(3, f32), Matrix.ColVec);
     try testing.expectEqual([3][5]f32, @TypeOf(@as(Matrix, undefined).data));
 
-    const definition: []const struct { usize, zffnn.Activation } = &.{
+    const definition: []const struct { usize, Activation } = &.{
         .{ 2, .none },
         .{ 3, .relu },
         .{ 1, .softmax },
     };
-    var network = zffnn.NN(definition, 4).new();
+    var network = NN(definition, 4).new();
 
     try testing.expectEqual(@as(usize, 6), network.num_nodes);
     try testing.expectEqual(@as(usize, 3), network.layers.len);
@@ -31,19 +34,19 @@ test "matrix and network types retain their compile-time shape metadata" {
 }
 
 test "load_from_embeds reconstructs parameters and inference output" {
-    const definition: []const struct { usize, zffnn.Activation } = &.{
+    const definition: []const struct { usize, Activation } = &.{
         .{ 2, .none },
         .{ 2, .none },
     };
-    const Net = zffnn.NN(definition, 1);
+    const Net = NN(definition, 1);
     var network = comptime Net.load_from_embeds();
 
-    var expected_weights = zffnn.Mat(2, 2).create(0);
+    var expected_weights = Mat(2, 2).create(0);
     expected_weights.load(.{
         .{ 2, -1 },
         .{ 0.5, 3 },
     });
-    var expected_bias = zffnn.Mat(2, 1).create(0);
+    var expected_bias = Mat(2, 1).create(0);
     expected_bias.load(.{
         .{1},
         .{-2},
@@ -52,11 +55,11 @@ test "load_from_embeds reconstructs parameters and inference output" {
     try testing.expectEqualDeep(expected_weights.data, network.layers[1].weights.data);
     try testing.expectEqualDeep(expected_bias.data, network.layers[1].bias.data);
 
-    var input = zffnn.Mat(1, 2).create(0);
+    var input = Mat(1, 2).create(0);
     input.load(.{
         .{ 4, 5 },
     });
-    var expected_output = zffnn.Mat(2, 1).create(0);
+    var expected_output = Mat(2, 1).create(0);
     expected_output.load(.{
         .{4},
         .{15},

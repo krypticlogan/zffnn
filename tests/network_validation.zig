@@ -1,10 +1,12 @@
 const std = @import("std");
 const testing = std.testing;
 
-const zffnn = @import("zffnn");
-const network_validation = zffnn.network_validation;
+const zgc = @import("zgc");
+const Activation = zgc.Extensions.Activation;
+const NN = zgc.Extensions.NN;
+const network_validation = zgc.Extensions.NetworkValidation;
 
-const valid_definition: []const struct { usize, zffnn.Activation } = &.{
+const valid_definition: []const struct { usize, Activation } = &.{
     .{ 2, .none },
     .{ 3, .relu },
     .{ 1, .none },
@@ -16,14 +18,14 @@ test "accepts a valid network definition" {
         network_validation.check(valid_definition, 4),
     );
 
-    const Net = zffnn.NN(valid_definition, 4);
+    const Net = NN(valid_definition, 4);
     const network = Net.new();
     try testing.expectEqual(@as(usize, 6), network.num_nodes);
 }
 
 test "rejects definitions with fewer than two layers" {
-    const empty: []const struct { usize, zffnn.Activation } = &.{};
-    const input_only: []const struct { usize, zffnn.Activation } = &.{
+    const empty: []const struct { usize, Activation } = &.{};
+    const input_only: []const struct { usize, Activation } = &.{
         .{ 2, .none },
     };
 
@@ -45,16 +47,16 @@ test "rejects a zero batch size" {
 }
 
 test "rejects zero-width layers" {
-    const zero_input: []const struct { usize, zffnn.Activation } = &.{
+    const zero_input: []const struct { usize, Activation } = &.{
         .{ 0, .none },
         .{ 1, .none },
     };
-    const zero_hidden: []const struct { usize, zffnn.Activation } = &.{
+    const zero_hidden: []const struct { usize, Activation } = &.{
         .{ 2, .none },
         .{ 0, .relu },
         .{ 1, .none },
     };
-    const zero_output: []const struct { usize, zffnn.Activation } = &.{
+    const zero_output: []const struct { usize, Activation } = &.{
         .{ 2, .none },
         .{ 0, .none },
     };
@@ -68,8 +70,8 @@ test "rejects zero-width layers" {
 }
 
 test "rejects an activated input layer" {
-    inline for (&.{ zffnn.Activation.relu, .sigmoid, .softmax }) |activation| {
-        const definition: []const struct { usize, zffnn.Activation } = &.{
+    inline for (&.{ Activation.relu, .sigmoid, .softmax }) |activation| {
+        const definition: []const struct { usize, Activation } = &.{
             .{ 2, activation },
             .{ 1, .none },
         };

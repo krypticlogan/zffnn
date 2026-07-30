@@ -37,9 +37,9 @@ This document outlines the upgrade path for the library to support new architect
        ↓
     Graph /
        ↓
-    Validation / lowering _
+    Validation / lowering
        ↓
-    Memory and parameter plan
+    Memory and parameter plan _
        ↓
     Executable Model type
        ↓
@@ -47,7 +47,17 @@ This document outlines the upgrade path for the library to support new architect
        ↓
     run() / forward()
     
-    
+
+  ### Next steps: Memory and parameter plan
+    1. Add SourceKind and source records.
+    2. Add dtype byte-size/alignment helpers.
+    3. Create a basic storage plan with one region per tensor.
+    4. Bind inputs, parameters, and constants to those regions.
+    5. Execute nodes in graph order.
+    6. Return views of every graph output.
+    7. Add validation and better errors.
+    8. Introduce storage reuse, fusion, and specialized kernels.
+    9. 
   ## Optimization goals: (3 levels)
   Though it's split into three distinct parts, the overall goal remains the same. Don't do extra work, and generate as effecient binaries as feasible.
 
@@ -72,5 +82,7 @@ This document outlines the upgrade path for the library to support new architect
 
   Matrices, graphs, and other internals should have some debug representation.
 
-  
+  ## Potential future goals:
+    - Solid scientific computing
+    - Backtrace the graph for optimization purposes (autodiff)
    

@@ -6,7 +6,7 @@ const expectEqual = testing.expectEqual;
 
 
 const Mat = @import("matrix.zig").Mat;
-const NN = @import("network.zig").NN;
+const NN = @import("nn.zig").NN;
 
 pub fn is_matrix(comptime maybe_mat_type: anytype) bool {
     // @compileLog(maybe_mat_type);

@@ -1,47 +1,49 @@
 const std = @import("std");
 const testing = std.testing;
 
-const zffnn = @import("zffnn");
+const zgc = @import("zgc");
+const Activation = zgc.Extensions.Activation;
+const Mat = zgc.Extensions.Matrix;
 const expect_mat_approx_equal = @import("test_helpers.zig").expect_mat_approx_equal;
 
 test "none leaves values unchanged" {
-    var actual = zffnn.Mat(2, 3).create(0);
+    var actual = Mat(2, 3).create(0);
     actual.load(.{
         .{ -1, 2, -3 },
         .{ 4, -5, 6 },
     });
     const expected = actual.dupe_like(.clone);
 
-    zffnn.Activation.apply(.none, &actual, false);
+    Activation.apply(.none, &actual, false);
 
     try testing.expectEqualDeep(expected.data, actual.data);
 }
 
 test "relu clamps negative values and preserves non-negative values" {
-    var actual = zffnn.Mat(2, 3).create(0);
+    var actual = Mat(2, 3).create(0);
     actual.load(.{
         .{ -1, 2, -3 },
         .{ 4, 0, 6 },
     });
-    var expected = zffnn.Mat(2, 3).create(0);
+    var expected = Mat(2, 3).create(0);
     expected.load(.{
         .{ 0, 2, 0 },
         .{ 4, 0, 6 },
     });
 
-    zffnn.Activation.apply(.relu, &actual, false);
+    Activation.apply(.relu, &actual, false);
 
     try testing.expectEqualDeep(expected.data, actual.data);
 }
 
 test "sigmoid matches known values and remains finite at extremes" {
-    var actual = zffnn.Mat(2, 3).create(0);
+    var actual = Mat(2, 3).create(0);
     actual.load(.{
         .{ -1, 0, 1 },
         .{ -1000, 2, 1000 },
     });
 
-    zffnn.Activation.apply(.sigmoid, &actual, false);
+    Activation.apply(.sigmoid, &actual, false);
 
     try testing.expectApproxEqAbs(@as(f32, 0.26894143), actual.get(0, 0), 1e-6);
     try testing.expectApproxEqAbs(@as(f32, 0.5), actual.get(0, 1), 1e-6);
@@ -58,7 +60,7 @@ test "sigmoid matches known values and remains finite at extremes" {
 }
 
 test "softmax branches agree and remain stable for extreme negative logits" {
-    var single = zffnn.Mat(3, 2).create(0);
+    var single = Mat(3, 2).create(0);
     single.load(.{
         .{ -1000, -3 },
         .{ -1001, -2 },
@@ -66,8 +68,8 @@ test "softmax branches agree and remain stable for extreme negative logits" {
     });
     var batched = single.dupe_like(.clone);
 
-    zffnn.Activation.apply(.softmax, &single, false);
-    zffnn.Activation.apply(.softmax, &batched, true);
+    Activation.apply(.softmax, &single, false);
+    Activation.apply(.softmax, &batched, true);
 
     try expect_mat_approx_equal(single, batched, 1e-6);
 

@@ -1,12 +1,17 @@
-# ZFFNN — Compile-Time Feedforward Neural Networks in Zig
+# ZGC -- Zig Graph Compiler
+### Completely validated, compiled tensor graphs for high performance numerical computing
 
-Networks are fully constructed at compile time, with:
+Extensions:
+- Neural Network (pre defined model)
+- Matrix (rank 2 tensor)
+
+<!--Networks are fully constructed at compile time, with:
 - compile-time shape validation
 - zero heap allocation
 - static memory layout
-- deterministic binaries
+- deterministic binaries-->
 
-This library is primarily designed for **inference on pretrained models**, particularly in constrained or embedded environments. 
+<!--This library is primarily designed for **inference on pretrained models**, particularly in constrained or embedded environments. -->
 
 A demo is provided for example usage.
 
@@ -18,15 +23,15 @@ A demo is provided for example usage.
 ## Installation
 
 ```bash
-zig fetch --save git+https://github.com/krypticlogan/zffnn
+zig fetch --save git+https://github.com/krypticlogan/zgc
 ```
 Add to your build.zig:
 ```zig
-const nn_dep = b.dependency("zffnn", .{
+const nn_dep = b.dependency("zgc", .{
     .target = target,
     .optimize = optimize,
 });
-const zffnn = nn_dep.module("zffnn");
+const zgc = nn_dep.module("zgc");
 ```
 Then later on, when creating your target, add the module as an import.
 ```zig
@@ -37,7 +42,7 @@ const exe = b.addExecutable(.{
         .target = target,
         .optimize = optimize,
         .imports = &.{
-            .{ .name = "zffnn", .module = zffnn }, // import the module here
+            .{ .name = "zgc", .module = zgc }, // import the module here
         },
 
     }),
@@ -45,7 +50,7 @@ const exe = b.addExecutable(.{
 ```
 Lastly, import the module in your src exe:
 ```zig
-const zf = @import("zffnn");
+const zf = @import("zgc");
 ```
 
 ### Defining a Network
@@ -66,7 +71,7 @@ const Net = NN(definition, batch_size);
 # Usage
 ## Minimal Flow for inference using pretrained weights
 ```zig
-const zf = @import("zffnn");
+const zf = @import("zgc");
 const Activation = zf.Activation;
 const NN = zf.NN;
 
@@ -97,15 +102,15 @@ Parameters must be embedded at compile time to ensure validity and static infere
     run_gen.addArg(embed_file_name);
     run_gen.addDirectoryArg(params_dir); // directory containing model parameters
     
-    const out_dir = run_gen.addOutputDirectoryArg("zffnn_embeds"); // output directory for the generated embeds.zig file
+    const out_dir = run_gen.addOutputDirectoryArg("zgc_embeds"); // output directory for the generated embeds.zig file
 
     const embed_mod = b.createModule(.{
         .root_source_file = out_dir.path(b, embed_file_name),
         .target = target,
         .optimize = optimize,
     });
-    // add the embed module to the zffnn import, the name "embed_params" must be used
-    zffnn.addImport("embed_params", embed_mod);
+    // add the embed module to the zgc import, the name "embed_params" must be used
+    zgc.addImport("embed_params", embed_mod);
 }
 ```
 
@@ -248,7 +253,7 @@ i.e
 
 ### Key Differences from PyTorch / TensorFlow
 
-| Feature | ZFFNN | PyTorch / TF |
+| Feature | zgc | PyTorch / TF |
 |----|----|----|
 Graph construction | Compile-time | Runtime
 Memory | Static	| Dynamic
@@ -287,7 +292,7 @@ Determinism | Built-in | Varies
 
 ### Summary
 
-ZFFNN treats neural networks as compile-time constructs, not runtime objects.
+zgc treats neural networks as compile-time constructs, not runtime objects.
 
 This enables:
 

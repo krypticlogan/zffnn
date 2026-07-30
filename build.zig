@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(gen);
 
     // library
-    const root_mod = b.addModule("zffnn", .{
+    const root_mod = b.addModule("zgc", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
@@ -33,7 +33,7 @@ pub fn build(b: *std.Build) void {
     });
     test_root_mod.addImport("embed_params", test_embed_params);
 
-    const test_mod = b.addModule("zffnn_tests", .{
+    const test_mod = b.addModule("zgc_tests", .{
         .root_source_file = b.path("tests/tests.zig"),
         .target = target,
         .optimize = optimize,
@@ -45,18 +45,19 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    test_mod.addImport("zffnn", test_root_mod);
+    test_mod.addImport("zgc", test_root_mod);
     test_mod.addImport("embedding_codegen", embedding_codegen_mod);
 
     const tests = b.addTest(.{
         .root_module = test_mod,
     });
+    
+    const check_step = b.step("check", "Compile tests without running them");
+    check_step.dependOn(&tests.step);
+    
     const run_mod_tests = b.addRunArtifact(tests);
-
     const test_step = b.step("test", "Run tests");
-
     test_step.dependOn(&run_mod_tests.step);
-
     // benchmarks
     //
     const benchmark_cli = b.option([]const u8, "benchmark", "Benchmark to run: inference|batch_sweep|ops") orelse "inference";
@@ -75,7 +76,7 @@ pub fn build(b: *std.Build) void {
     const opts = .{ .target = target, .optimize = optimize };
     const zbench_module = b.dependency("zbench", opts).module("zbench");
 
-    const benchmark_mod = b.addModule("zffnn_benchmarks", .{
+    const benchmark_mod = b.addModule("zgc_benchmarks", .{
         .root_source_file = b.path("benchmarks/benchmark.zig"),
         .target = target,
         .optimize = optimize,
@@ -85,7 +86,7 @@ pub fn build(b: *std.Build) void {
     });
 
     benchmark_mod.addImport("zbench", zbench_module);
-    benchmark_mod.addImport("zffnn", root_mod);
+    benchmark_mod.addImport("zgc", root_mod);
     benchmark_mod.addImport("build_options", benchmark_opts.createModule());
     const benchmark = b.addExecutable(.{
         .name = "benchmark",

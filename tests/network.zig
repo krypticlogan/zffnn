@@ -1,15 +1,18 @@
 const std = @import("std");
 const testing = std.testing;
 
-const zffnn = @import("zffnn");
+const zgc = @import("zgc");
+const Activation = zgc.Extensions.Activation;
+const Mat = zgc.Extensions.Matrix;
+const NN = zgc.Extensions.NN;
 const expect_mat_approx_equal = @import("test_helpers.zig").expect_mat_approx_equal;
 
-const linear_def: []const struct { usize, zffnn.Activation } = &.{
+const linear_def: []const struct { usize, Activation } = &.{
     .{ 2, .none },
     .{ 2, .none },
 };
 
-const softmax_def: []const struct { usize, zffnn.Activation } = &.{
+const softmax_def: []const struct { usize, Activation } = &.{
     .{ 2, .none },
     .{ 2, .softmax },
 };
@@ -26,14 +29,14 @@ fn set_known_parameters(nn: anytype) void {
 }
 
 test "single-sample inference matches known linear output" {
-    var nn = zffnn.NN(linear_def, 1).new();
+    var nn = NN(linear_def, 1).new();
     set_known_parameters(&nn);
 
-    var input = zffnn.Mat(1, 2).create(0);
+    var input = Mat(1, 2).create(0);
     input.load(.{
         .{ 4, 5 },
     });
-    var expected = zffnn.Mat(2, 1).create(0);
+    var expected = Mat(2, 1).create(0);
     expected.load(.{
         .{4},
         .{15},
@@ -45,16 +48,16 @@ test "single-sample inference matches known linear output" {
 }
 
 test "multi-sample inference matches known linear output" {
-    var nn = zffnn.NN(linear_def, 3).new();
+    var nn = NN(linear_def, 3).new();
     set_known_parameters(&nn);
 
-    var input = zffnn.Mat(3, 2).create(0);
+    var input = Mat(3, 2).create(0);
     input.load(.{
         .{ 4, 5 },
         .{ -2, 1 },
         .{ 0, -3 },
     });
-    var expected = zffnn.Mat(2, 3).create(0);
+    var expected = Mat(2, 3).create(0);
     expected.load(.{
         .{ 4, -4, 4 },
         .{ 15, 0, -11 },
@@ -66,10 +69,10 @@ test "multi-sample inference matches known linear output" {
 }
 
 test "forward and forward_ produce the same output" {
-    var nn = zffnn.NN(linear_def, 3).new();
+    var nn = NN(linear_def, 3).new();
     set_known_parameters(&nn);
 
-    var input = zffnn.Mat(3, 2).create(0);
+    var input = Mat(3, 2).create(0);
     input.load(.{
         .{ 4, 5 },
         .{ -2, 1 },
@@ -77,17 +80,17 @@ test "forward and forward_ produce the same output" {
     });
 
     const returning_output = nn.forward(input);
-    var in_place_output = zffnn.Mat(2, 3).create(std.math.nan(f32));
+    var in_place_output = Mat(2, 3).create(std.math.nan(f32));
     nn.forward_(input, &in_place_output);
 
     try testing.expectEqualDeep(returning_output.data, in_place_output.data);
 }
 
 test "network applies batched softmax per sample" {
-    var nn = zffnn.NN(softmax_def, 3).new();
+    var nn = NN(softmax_def, 3).new();
     set_known_parameters(&nn);
 
-    var input = zffnn.Mat(3, 2).create(0);
+    var input = Mat(3, 2).create(0);
     input.load(.{
         .{ 4, 5 },
         .{ -2, 1 },
@@ -108,12 +111,12 @@ test "network applies batched softmax per sample" {
 }
 
 test "random initialization is deterministic by seed" {
-    const def: []const struct { usize, zffnn.Activation } = &.{
+    const def: []const struct { usize, Activation } = &.{
         .{ 3, .none },
         .{ 4, .relu },
         .{ 2, .softmax },
     };
-    const Net = zffnn.NN(def, 2);
+    const Net = NN(def, 2);
 
     var first = Net.new();
     first.random_init(103);
@@ -126,7 +129,7 @@ test "random initialization is deterministic by seed" {
     try testing.expectEqualDeep(first.layers[1].bias.data, second.layers[1].bias.data);
     try testing.expect(!std.meta.eql(first.layers[1].weights.data, different.layers[1].weights.data));
 
-    var input = zffnn.Mat(2, 3).create(0);
+    var input = Mat(2, 3).create(0);
     input.load(.{
         .{ 1, 2, 3 },
         .{ 4, 5, 6 },
