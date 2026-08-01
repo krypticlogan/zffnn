@@ -37,23 +37,23 @@ This document outlines the upgrade path for the library to support new architect
        ↓
     Graph /
        ↓
-    Validation / lowering
+    Validation / lowering _
        ↓
-    Memory and parameter plan _
+    Memory and parameter plan /
        ↓
-    Executable Model type
+    Executable Model type /
        ↓
-    Model instance
+    Model instance /
        ↓
-    run() / forward()
+    run() / forward() /
     
 
   ### Next steps: Memory and parameter plan
-    1. Add SourceKind and source records.
-    2. Add dtype byte-size/alignment helpers.
-    3. Create a basic storage plan with one region per tensor.
-    4. Bind inputs, parameters, and constants to those regions.
-    5. Execute nodes in graph order.
+    1. Add SourceKind and source records. done
+    2. Add dtype byte-size/alignment helpers. done
+    3. Create a basic storage plan with one region per tensor. done
+    4. Bind inputs, parameters, and constants to those regions. done
+    5. Execute nodes in graph order. done
     6. Return views of every graph output.
     7. Add validation and better errors.
     8. Introduce storage reuse, fusion, and specialized kernels.

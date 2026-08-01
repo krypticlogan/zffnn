@@ -1,12 +1,7 @@
 .{
     .name = .zgc,
     .version = "0.0.1",
-    .dependencies = .{
-        .zbench = .{
-            .url = "git+https://github.com/hendriknielaender/zbench.git#2a231fc165ab22e5ef0c2b7c8841ee86a445dffa",
-            .hash = "zbench-0.13.0-YTdc71ZAAQCUJ0w9jM6ZyLOBxDlGv2j3CqCEj49l-KcP",
-        },
-    },
+    .dependencies = .{},
     .fingerprint = 0x5820f916c3bb1bf2,
     .paths = .{ "build.zig", "build.zig.zon", "src", "embed_helper" },
 }

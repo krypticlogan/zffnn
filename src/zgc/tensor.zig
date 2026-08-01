@@ -1,7 +1,6 @@
 const std = @import("std");
 const Dtype = @import("storage.zig").Dtype;
 const Node = @import("builder.zig").Node;
-const Source = @import("builder.zig").Source;
 
 pub const Id = usize;
 pub const Shape_T = []const usize;
@@ -63,9 +62,21 @@ pub fn Tensor(comptime dtype: Dtype, comptime tensor_shape: Shape_T) type {
     };
 }
 
+pub const Source = struct {
+    kind: Kind,
+    tensor: Id,
+    // binding: Binding,
+
+    pub const Kind = enum { input, parameter, constant, state };
+
+    pub const Binding = enum {
+        embed,
+    };
+};
+
 /// Originators (producers) of tensors.
 pub const Origin = union(enum) {
-    source: Source.Kind,
+    source: Id,
     node: Node.Id,
 };
 
@@ -82,8 +93,8 @@ pub fn Info(comptime max_rank: usize) type {
             switch (info.origin) {
                 .node => |node| std.debug.print(" producer=n{d}\n", .{node}),
                 .source => |source| std.debug.print(
-                    " source={s}\n",
-                    .{@tagName(source)},
+                    " source={d}\n",
+                    .{source},
                 ),
             }
         }
@@ -101,12 +112,28 @@ pub fn debugPrintShape(shape: anytype) void {
     std.debug.print("]", .{});
 }
 
-/// Creates a view into memory for a given tensor.
-pub fn View(T: type, rank: usize) type {
+/// View into memory for a given tensor.
+pub fn View(comptime T: type, comptime tensor_rank: usize) type {
     return struct {
-        ptr: [*]T,
-        shape: [rank]usize,
-        stride: [rank]usize,
-        offset: usize,
+        pub const scalar_type = T;
+        pub const dtype = Dtype.fromScalar(T);
+        pub const rank = tensor_rank;
+
+        data: []T,
+        shape: [tensor_rank]usize,
+        // stride: [tensor_rank]usize,
+        // offset: usize,
+    };
+}
+
+/// Read-only view into memory for a given tensor.
+pub fn ConstView(comptime T: type, comptime tensor_rank: usize) type {
+    return struct {
+        pub const scalar_type = T;
+        pub const dtype = Dtype.fromScalar(T);
+        pub const rank = tensor_rank;
+
+        data: []const T,
+        shape: [tensor_rank]usize,
     };
 }

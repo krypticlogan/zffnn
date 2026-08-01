@@ -10,3 +10,4 @@ zig-out
 todo.md
 *zig-pkg
 sandbox
+.DS_Store
