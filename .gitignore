@@ -1,13 +1,9 @@
 .zig-cache
 .idea
 imgui.ini
-font
 desktop.ini
 synopsis.md
 __pycache__
-benchmarks/other_models
 zig-out
-todo.md
 *zig-pkg
-sandbox
 .DS_Store
