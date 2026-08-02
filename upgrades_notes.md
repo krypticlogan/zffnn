@@ -54,7 +54,7 @@ This document outlines the upgrade path for the library to support new architect
     3. Create a basic storage plan with one region per tensor. done
     4. Bind inputs, parameters, and constants to those regions. done
     5. Execute nodes in graph order. done
-    6. Return views of every graph output.
+    6. Return views of every graph output. done
     7. Add validation and better errors.
     8. Introduce storage reuse, fusion, and specialized kernels.
     9. 
