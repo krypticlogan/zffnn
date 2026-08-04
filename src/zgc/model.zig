@@ -1,12 +1,12 @@
 const std = @import("std");
 const Builder = @import("builder.zig");
-const Graph = Builder.Graph;
+const Graph = @import("graph.zig");
 const Storage = @import("storage.zig");
 const Tensor = @import("tensor.zig");
 
 pub fn Model(
-    comptime capacities: Builder.GraphCapacity,
-    comptime graph: Graph(capacities),
+    comptime capacities: Graph.Capacity,
+    comptime graph: Graph.Graph(capacities),
 ) type {
     // generate storage plan
     const plan = Storage.MemoryPlan(capacities, graph);
@@ -43,7 +43,7 @@ pub fn Model(
         pub fn Source(
             model: *Self,
             comptime source_key: anytype,
-            comptime bytes: []const u8,
+            bytes: []const u8,
         ) void {
             const source_id: usize = switch (@typeInfo(@TypeOf(source_key))) {
                 .@"enum" => @intFromEnum(source_key),
@@ -55,7 +55,7 @@ pub fn Model(
             @memcpy(source_region, bytes);
         }
 
-        fn executeNode(model: *Self, comptime node_id: Builder.Node.Id) void {
+        fn executeNode(model: *Self, comptime node_id: Graph.Node.Id) void {
             const node = graph.nodes[node_id].?;
             const InputViews = comptime blk: {
                 var input_types: [node.input_count]type = undefined;

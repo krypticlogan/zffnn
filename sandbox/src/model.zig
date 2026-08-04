@@ -2,12 +2,15 @@ const std = @import("std");
 const zgc = @import("zgc");
 
 pub const Sources = enum(usize) {
-    input,
+    a,
+    b
 };
 
 fn defineGraph(builder: anytype) void {
-    const input = builder.input(Sources.input, .f32, &.{ 2, 3 });
-    builder.output(builder.relu(input));
+    const a = builder.input(Sources.a, .f32, &.{ 2, 3 });
+    const b = builder.input(Sources.a, .f32, &.{ 2, 3 });
+    const c = builder.add(a, b);
+    builder.output(builder.relu(c));
 }
 
 pub const capacity = blk: {
@@ -26,11 +29,14 @@ pub const graph = blk: {
 };
 
 pub const Model = zgc.Model(capacity, graph);
-pub const input_values = [_]f32{ -3.5, -0.0, 0.0, 2.25, -1.0, 8.0 };
+pub const a_values = [_]f32{ -3.5, -0.0, 0.0, 2.25, -1.0, 8.0 };
+pub const b_values = [_]f32{ -3.5, -0.0, 0.0, 2.25, -1.0, 8.0 };
 
 pub fn loadInput(model: *Model) void {
-    const bytes: [@sizeOf(@TypeOf(input_values))]u8 = @bitCast(input_values);
-    model.Source(Sources.input, &bytes);
+    const a_bytes: [@sizeOf(@TypeOf(a_values))]u8 = @bitCast(a_values);
+    const b_bytes: [@sizeOf(@TypeOf(a_values))]u8 = @bitCast(b_values);
+    model.Source(Sources.a, &a_bytes);
+    model.Source(Sources.a, &b_bytes);
 }
 
 pub fn keepOutputAlive(model: *const Model) void {

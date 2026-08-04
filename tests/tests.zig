@@ -8,4 +8,5 @@ test {
     _ = @import("builder.zig");
     _ = @import("model.zig");
     _ = @import("tensor_ops/tests.zig");
+    _ = @import("validation.zig");
 }

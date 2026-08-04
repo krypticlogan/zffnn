@@ -1,6 +1,5 @@
 const std = @import("std");
-const Dtype = @import("storage.zig").Dtype;
-const Node = @import("builder.zig").Node;
+const Dtype = @import("dtype.zig").Dtype;
 
 pub const Id = usize;
 pub const Shape_T = []const usize;
@@ -77,7 +76,7 @@ pub const Source = struct {
 /// Originators (producers) of tensors.
 pub const Origin = union(enum) {
     source: Id,
-    node: Node.Id,
+    node: Id,
 };
 
 /// Tensor metadata specialized for one graph's maximum rank.

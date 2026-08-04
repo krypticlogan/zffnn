@@ -1,6 +1,7 @@
 const std = @import("std");
 const Tensor = @import("tensor.zig");
 const kernels = @import("kernels.zig");
+const validation = @import("validation.zig");
 /// Tensor Operations
 pub const Op = union(enum) {
     relu,
@@ -21,9 +22,11 @@ pub const Op = union(enum) {
 
     pub fn inferRank(op: Op, inputs: anytype) usize {
         return switch (op) {
-            .relu, .softmax, .transpose => inputs[0].rank,
-            .add => @max(inputs[0].rank, inputs[1].rank),
-            .matmul => 2,
+            .relu => inferUnaryRank("relu", inputs),
+            .add => inferAddRank(inputs),
+            .matmul => inferMatmulRank(inputs),
+            .softmax => inferUnaryRank("softmax", inputs),
+            .transpose => inferUnaryRank("transpose", inputs),
         };
     }
 
@@ -33,17 +36,18 @@ pub const Op = union(enum) {
         comptime max_rank: usize,
     ) Tensor.Shape(max_rank) {
         return switch (op) {
-            .relu, .softmax => inputs[0].shape,
-            .add => if (inputs[0].shape.rank >= inputs[1].shape.rank)
-                inputs[0].shape
-            else
-                inputs[1].shape,
-            .matmul => Tensor.Shape(max_rank).init(&.{
-                inputs[0].shape.at(0),
-                inputs[1].shape.at(1),
-            }),
+            .relu => inferUnaryShape("relu", inputs, max_rank),
+            .add => inferAddShape(inputs, max_rank),
+            .matmul => inferMatmulShape(inputs, max_rank),
+            .softmax => |attrs| blk: {
+                const shape = inferUnaryShape("softmax", inputs, max_rank);
+                validation.requireAxis("softmax", inputs[0], attrs.axis);
+                break :blk shape;
+            },
             .transpose => |attrs| blk: {
-                var shape = inputs[0].shape;
+                var shape = inferUnaryShape("transpose", inputs, max_rank);
+                validation.requireAxis("transpose", inputs[0], attrs.axis_a);
+                validation.requireAxis("transpose", inputs[0], attrs.axis_b);
                 const axis_a: usize = @intCast(attrs.axis_a);
                 const axis_b: usize = @intCast(attrs.axis_b);
                 std.mem.swap(
@@ -73,3 +77,54 @@ pub const Op = union(enum) {
         }
     }
 };
+
+fn inferUnaryRank(comptime operation: []const u8, inputs: anytype) usize {
+    validation.requireInputCount(operation, inputs, 1);
+    return validation.rankOf(inputs[0]);
+}
+
+fn inferUnaryShape(
+    comptime operation: []const u8,
+    comptime inputs: anytype,
+    comptime max_rank: usize,
+) Tensor.Shape(max_rank) {
+    validation.requireInputCount(operation, inputs, 1);
+    return inputs[0].shape;
+}
+
+fn inferAddRank(inputs: anytype) usize {
+    validation.requireInputCount("add", inputs, 2);
+    validation.requireMatchingRanks("add", inputs);
+    validation.requireMatchingDtypes("add", inputs);
+    return validation.rankOf(inputs[0]);
+}
+
+fn inferAddShape(
+    comptime inputs: anytype,
+    comptime max_rank: usize,
+) Tensor.Shape(max_rank) {
+    _ = inferAddRank(inputs);
+    validation.requireMatchingShapes("add", inputs[0], inputs[1]);
+    return inputs[0].shape;
+}
+
+fn inferMatmulRank(inputs: anytype) usize {
+    validation.requireInputCount("matmul", inputs, 2);
+    validation.requireRanks("matmul", inputs, &.{ 2, 2 });
+    validation.requireMatchingDtypes("matmul", inputs);
+    validation.requireDtype("matmul", inputs[0], .f32);
+    return 2;
+}
+
+fn inferMatmulShape(
+    comptime inputs: anytype,
+    comptime max_rank: usize,
+) Tensor.Shape(max_rank) {
+    _ = inferMatmulRank(inputs);
+    validation.requireMatchingExtents("matmul", inputs[0], 1, inputs[1], 0);
+
+    return Tensor.Shape(max_rank).init(&.{
+        inputs[0].shape.at(0),
+        inputs[1].shape.at(1),
+    });
+}
