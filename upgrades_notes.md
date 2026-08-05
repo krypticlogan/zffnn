@@ -27,7 +27,7 @@ This document outlines the upgrade path for the library to support new architect
       - `Shape` (tuple type for defining dimensional shape)
       - `Stride` (tuple type for defining dimensional stride)
 
-    - `Graph Builder` (generally for internal use, construction of tensor-based models)
+    - `Graph Builder` (generally for internal use, construction of tensor-based models) -- create a definition builder to consume
     - `Operators` (compute operations, composition/control operations, view operations)
     - `Models` (predefined generators for particular types of models)
 
@@ -46,18 +46,20 @@ This document outlines the upgrade path for the library to support new architect
     Model instance /
        ↓
     run() / forward() /
-    
 
-  ### Next steps: Memory and parameter plan
+ 
+
+  ### Next steps: 
     1. Add SourceKind and source records. done
     2. Add dtype byte-size/alignment helpers. done
     3. Create a basic storage plan with one region per tensor. done
     4. Bind inputs, parameters, and constants to those regions. done
     5. Execute nodes in graph order. done
     6. Return views of every graph output. done
-    7. Add validation and better errors.
-    8. Introduce storage reuse, fusion, and specialized kernels.
-    9. 
+    7. Add validation and better errors. in progress -- must do final pass
+    8. Implement kernels
+    9. Introduce storage reuse, fusion, and specialized kernels.
+  
   ## Optimization goals: (3 levels)
   Though it's split into three distinct parts, the overall goal remains the same. Don't do extra work, and generate as effecient binaries as feasible.
 
