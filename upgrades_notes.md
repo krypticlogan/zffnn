@@ -50,16 +50,12 @@ This document outlines the upgrade path for the library to support new architect
  
 
   ### Next steps: 
-    1. Add SourceKind and source records. done
-    2. Add dtype byte-size/alignment helpers. done
-    3. Create a basic storage plan with one region per tensor. done
-    4. Bind inputs, parameters, and constants to those regions. done
-    5. Execute nodes in graph order. done
-    6. Return views of every graph output. done
-    7. Add validation and better errors. in progress -- must do final pass (eliminate debug asserts, add better error messages, and add more validation)
-    8. Implement kernels -- in progress -- must do final pass
-    9. Introduce storage reuse, fusion, and specialized kernels.
-    10. Integrate parameter embeddings/linking into graph builder.
+    1. Add validation and better errors. in progress -- must do final pass (eliminate debug asserts, add better error messages, and add more validation)
+    2. Implement kernels/operations -- in progress -- must do final pass
+    3. Abstract builder, create a pure definition builder, 
+      4. and implement a graph builder that consumes the definition builder.
+    5. Introduce storage reuse, fusion, and specialized kernels.
+    6. Integrate parameter embeddings/linking into graph builder.
   
   ## Optimization goals: (3 levels)
   Though it's split into three distinct parts, the overall goal remains the same. Don't do extra work, and generate as effecient binaries as feasible.
