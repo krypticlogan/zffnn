@@ -4,6 +4,7 @@ const Tensor = @import("tensor.zig");
 const Dtype = @import("dtype.zig").Dtype;
 const Shape_T = Tensor.Shape_T;
 const Op = @import("op.zig").Op;
+const layout_ops = @import("kernels/layout.zig");
 
 /// Builder that recieves a backend (Graph / Counting) supports building a model.
 /// Either begin with the `GraphBackend` and supply maximum counts yourself, or use the `CountingBackend` to compute maximums to be supplied to the `GraphBackend`.
@@ -41,33 +42,51 @@ pub fn Builder(comptime Backend: type) type {
         }
 
         pub fn relu(self: *Self, comptime tensor: ValueType) ValueType {
-            return self.backend.addNode(.relu, &.{tensor});
+            return self.backend.addNode(.{ .compute = .relu }, &.{tensor});
         }
 
         pub fn exp(self: *Self, comptime tensor: ValueType) ValueType {
-            return self.backend.addNode(.exp, &.{tensor});
+            return self.backend.addNode(.{ .compute = .exp }, &.{tensor});
         }
-        
+
         pub fn add(self: *Self, comptime lhs: ValueType, comptime rhs: ValueType) ValueType {
-            return self.backend.addNode(.add, &.{lhs, rhs});
+            return self.backend.addNode(.{ .compute = .add }, &.{ lhs, rhs });
         }
 
         pub fn sub(self: *Self, comptime lhs: ValueType, comptime rhs: ValueType) ValueType {
-            return self.backend.addNode(.sub, &.{lhs, rhs});
+            return self.backend.addNode(.{ .compute = .sub }, &.{ lhs, rhs });
         }
 
         pub fn matmul(self: *Self, comptime lhs: ValueType, comptime rhs: ValueType) ValueType {
-            return self.backend.addNode(.matmul, &.{ lhs, rhs });
+            return self.backend.addNode(.{ .compute = .matmul }, &.{ lhs, rhs });
         }
-        
+
         pub fn softmax(
-              self: *Self,
-              comptime tensor: ValueType,
-              comptime axis: i8,
-          ) ValueType {
-              return self.backend.addNode(.{ .softmax = .{ .axis = axis }}, &.{tensor});
-          }
-        
+            self: *Self,
+            comptime tensor: ValueType,
+            comptime axis: i8,
+        ) ValueType {
+            return self.backend.addNode(
+                .{ .compute = .{ .softmax = .{ .axis = axis } } },
+                &.{tensor},
+            );
+        }
+
+        pub fn transpose(
+            self: *Self,
+            comptime tensor: ValueType,
+            comptime axis_a: i8,
+            comptime axis_b: i8,
+        ) ValueType {
+            return self.backend.addNode(
+                .{ .view = .{ .transpose = .{
+                    .axis_a = axis_a,
+                    .axis_b = axis_b,
+                } } },
+                &.{tensor},
+            );
+        }
+
         pub fn output(self: *Self, comptime value: ValueType) void {
             self.backend.markOutput(value);
         }
@@ -82,7 +101,7 @@ fn sourceIndex(comptime source_key: anytype) usize {
 }
 
 /// Intermediate / Internal Graph type
-pub fn Value(comptime max_rank: usize) type {
+pub fn TensorValue(comptime max_rank: usize) type {
     return struct {
         id: Tensor.Id,
         dtype: Dtype,
@@ -110,7 +129,7 @@ pub fn GraphBackend(comptime capacities: Graph.Capacity) type {
         const Self = @This();
         pub const max_rank = capacities.max_rank;
         const TensorInfo = Tensor.Info(max_rank);
-        pub const ValueType = Value(max_rank);
+        pub const ValueType = TensorValue(max_rank);
         graph: Graph.Graph(capacities) = .init(),
 
         pub fn init() Self {
@@ -132,14 +151,17 @@ pub fn GraphBackend(comptime capacities: Graph.Capacity) type {
             comptime dtype: Dtype,
             comptime shape: Shape_T,
         ) ValueType {
-            const info = TensorInfo {
+            const tensor_id = self.nextTensorID();
+            const info = TensorInfo{
                 .dtype = dtype,
                 .shape = .init(shape),
                 .origin = .{ .source = source_index },
+                .layout = .contiguous(.init(shape)),
+                .storage_tensor = tensor_id,
             };
-            const source = Tensor.Source {
+            const source = Tensor.Source{
                 .kind = kind,
-                .tensor = self.nextTensorID(),
+                .tensor = tensor_id,
             };
             self.graph.insertSource(source_index, source);
             const id = self.graph.insertTensor(info);
@@ -156,11 +178,33 @@ pub fn GraphBackend(comptime capacities: Graph.Capacity) type {
             comptime inputs: []const ValueType,
         ) ValueType {
             const node_id = self.nextNodeID();
-            const result_shape = op.inferShape(inputs, max_rank);
-            const result_info = TensorInfo{
-                .dtype = inputs[0].dtype,
-                .shape = result_shape,
-                .origin = .{ .node = node_id },
+            const InputInfos = [inputs.len]TensorInfo;
+            var input_infos: InputInfos = undefined;
+            for (inputs, 0..) |input, index| {
+                input_infos[index] = self.graph.tensors[input.id].?;
+            }
+
+            const result_info: TensorInfo = switch (op) {
+                .compute => |compute| blk: {
+                    const shape = compute.inferShape(inputs, max_rank);
+                    break :blk .{
+                        .dtype = inputs[0].dtype,
+                        .shape = shape,
+                        .origin = .{ .node = node_id },
+                        .layout = .contiguous(shape),
+                        .storage_tensor = self.nextTensorID(),
+                    };
+                },
+                .view => |view| blk: {
+                    const result = layout_ops.infer(view, input_infos, max_rank);
+                    break :blk .{
+                        .dtype = inputs[0].dtype,
+                        .shape = result.shape,
+                        .origin = .{ .node = node_id },
+                        .layout = result.layout,
+                        .storage_tensor = result.storage_tensor,
+                    };
+                },
             };
             const result_id = self.graph.insertTensor(result_info);
 
@@ -170,6 +214,7 @@ pub fn GraphBackend(comptime capacities: Graph.Capacity) type {
 
             self.graph.insertNode(.{
                 .op = op,
+                .kind = op.kind(),
                 .input_count = inputs.len,
                 .input_start = self.graph.input_ref_ct - inputs.len,
                 .result = result_id,
@@ -223,10 +268,13 @@ pub const CapacityCountingBackend = struct {
 
     pub fn addNode(
         self: *Self,
-        op: Op,
-        inputs: []const ValueType,
+        comptime op: Op,
+        comptime inputs: []const ValueType,
     ) ValueType {
-        const output_rank = op.inferRank(inputs);
+        const output_rank = switch (op) {
+            .compute => |compute| compute.inferRank(inputs),
+            .view => |view| layout_ops.inferRank(view, inputs),
+        };
 
         self.counts.max_nodes += 1;
         self.graph.node_ct += 1;

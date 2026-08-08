@@ -59,6 +59,12 @@ test "builder.zig" {
     try expect(graph.outputs[0].? == 3);
     try expect(graph.tensors[2].?.shape.at(0) == 3);
     try expect(graph.tensors[2].?.shape.at(1) == 7);
+    try expect(graph.tensors[0].?.layout.offset == 0);
+    try std.testing.expectEqual([2]isize{ 4, 1 }, graph.tensors[0].?.layout.strides);
+    try std.testing.expectEqual([2]isize{ 7, 1 }, graph.tensors[2].?.layout.strides);
+    try expect(graph.tensors[0].?.storage_tensor == 0);
+    try expect(graph.tensors[2].?.storage_tensor == 2);
+    try expect(graph.nodes[0].?.kind == .compute);
 }
 
 test "counting pass discovers maximum shape rank" {
@@ -86,4 +92,32 @@ test "counting pass discovers maximum shape rank" {
     try expect(@TypeOf(graph.tensors[0].?.shape).rank_capacity == 4);
     try expect(graph.tensors[0].?.shape.rank == 4);
     try expect(graph.tensors[0].?.shape.at(3) == 5);
+}
+
+fn buildTranspose(builder: anytype) void {
+    const input = builder.input(Sources.rank_four, .f32, &.{ 2, 3, 4 });
+    builder.output(builder.transpose(input, 0, 2));
+}
+
+test "transpose creates an aliasing view node" {
+    const counts = comptime blk: {
+        var backend = CountingBackend{};
+        var builder = Builder(CountingBackend){ .backend = &backend };
+        buildTranspose(&builder);
+        break :blk backend.counts;
+    };
+    const graph = comptime blk: {
+        const Backend = GraphBackend(counts);
+        var backend = Backend.init();
+        var builder = Builder(Backend){ .backend = &backend };
+        buildTranspose(&builder);
+        break :blk backend.finish();
+    };
+
+    const source = graph.tensors[0].?;
+    const transposed = graph.tensors[1].?;
+    try expect(graph.nodes[0].?.kind == .view);
+    try expect(transposed.storage_tensor == source.storage_tensor);
+    try std.testing.expectEqual([3]usize{ 4, 3, 2 }, transposed.shape.dims);
+    try std.testing.expectEqual([3]isize{ 1, 4, 12 }, transposed.layout.strides);
 }

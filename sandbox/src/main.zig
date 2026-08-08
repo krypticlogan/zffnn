@@ -23,7 +23,7 @@ pub fn main() void {
     const output = model.outputView(0);
     std.debug.print("\n== Output ==\nshape={any}\ndata={any}\n", .{
         output.shape,
-        output.data,
+        output.storage,
     });
 
     std.debug.print("\n== Memory after execution ==\n", .{});

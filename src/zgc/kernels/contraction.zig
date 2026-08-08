@@ -1,6 +1,5 @@
 const std = @import("std");
 const accumulation = @import("accumulation.zig");
-
 /// Multiply two contiguous row-major rank-2 tensors.
 ///
 /// lhs:    [M, K]
@@ -34,9 +33,16 @@ pub fn matmul(lhs: anytype, rhs: anytype, output: anytype) void {
     std.debug.assert(rhs.shape[0] == k_len); // TODO: this stuff should be enforced at graph-time
     std.debug.assert(output.shape[0] == m);
     std.debug.assert(output.shape[1] == n);
-    std.debug.assert(lhs.data.len == m * k_len);
-    std.debug.assert(rhs.data.len == k_len * n);
-    std.debug.assert(output.data.len == m * n);
+
+    const lhs_storage = lhs.contiguousSlice() orelse
+        @panic("matmul kernel requires contiguous lhs");
+    const rhs_storage = rhs.contiguousSlice() orelse
+        @panic("matmul kernel requires contiguous rhs");
+    const output_storage = output.contiguousSlice() orelse
+        @panic("matmul kernel requires contiguous output");
+    std.debug.assert(lhs_storage.len == m * k_len);
+    std.debug.assert(rhs_storage.len == k_len * n);
+    std.debug.assert(output_storage.len == m * n);
 
     const dtype = Output.dtype;
     const vector_len = std.simd.suggestVectorLength(Output.scalar_type) orelse 1;
@@ -49,19 +55,16 @@ pub fn matmul(lhs: anytype, rhs: anytype, output: anytype) void {
 
         while (col + vector_len <= n) : (col += vector_len) {
             var accumulator: Accumulator = @splat(0);
-
             for (0..k_len) |k| {
                 const lhs_value: Accumulator = @splat(
-                    accumulation.widenScalar(dtype, lhs.data[row * k_len + k]),
+                    accumulation.widenScalar(dtype, lhs_storage[row * k_len + k]),
                 );
                 const rhs_values: InputVector =
-                    rhs.data[k * n + col ..][0..vector_len].*;
+                    rhs_storage[k * n + col ..][0..vector_len].*;
 
-                accumulator +=
-                    lhs_value * accumulation.widenVector(dtype, vector_len, rhs_values);
+                accumulator += lhs_value * accumulation.widenVector(dtype, vector_len, rhs_values);
             }
-
-            output.data[row * n + col ..][0..vector_len].* = accumulator;
+            output_storage[row * n + col ..][0..vector_len].* = accumulator;
         }
 
         while (col < n) : (col += 1) {
@@ -69,11 +72,11 @@ pub fn matmul(lhs: anytype, rhs: anytype, output: anytype) void {
 
             for (0..k_len) |k| {
                 accumulator +=
-                    accumulation.widenScalar(dtype, lhs.data[row * k_len + k]) *
-                    accumulation.widenScalar(dtype, rhs.data[k * n + col]);
+                    accumulation.widenScalar(dtype, lhs_storage[row * k_len + k]) *
+                    accumulation.widenScalar(dtype, rhs_storage[k * n + col]);
             }
 
-            output.data[row * n + col] = accumulator;
+            output_storage[row * n + col] = accumulator;
         }
     }
 }

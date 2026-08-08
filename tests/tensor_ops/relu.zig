@@ -6,15 +6,19 @@ test "relu writes clamped values to its output view" {
     var output_data: [input_data.len]f32 = @splat(std.math.nan(f32));
 
     const input: zgc.Tensor.View(f32, 2) = .{
-        .data = &input_data,
+        .storage = &input_data,
         .shape = .{ 2, 3 },
+        .strides = .{ 3, 1 },
+        .offset = 0,
     };
     const output: zgc.Tensor.View(f32, 2) = .{
-        .data = &output_data,
+        .storage = &output_data,
         .shape = .{ 2, 3 },
+        .strides = .{ 3, 1 },
+        .offset = 0,
     };
 
-    const op: zgc.Op = .relu;
+    const op: zgc.Op = .{ .compute = .relu };
     op.execute(.{input}, output);
 
     try std.testing.expectEqualSlices(
@@ -29,12 +33,16 @@ test "relu preserves f16 dtype semantics" {
     var output_data: [input_data.len]f16 = undefined;
 
     const input: zgc.Tensor.View(f16, 1) = .{
-        .data = &input_data,
+        .storage = &input_data,
         .shape = .{input_data.len},
+        .strides = .{1},
+        .offset = 0,
     };
     const output: zgc.Tensor.View(f16, 1) = .{
-        .data = &output_data,
+        .storage = &output_data,
         .shape = .{output_data.len},
+        .strides = .{1},
+        .offset = 0,
     };
 
     comptime {
@@ -43,7 +51,7 @@ test "relu preserves f16 dtype semantics" {
         std.debug.assert(@TypeOf(input).rank == 1);
     }
 
-    const op: zgc.Op = .relu;
+    const op: zgc.Op = .{ .compute = .relu };
     op.execute(.{input}, output);
 
     try std.testing.expectEqualSlices(
@@ -58,18 +66,49 @@ test "relu preserves i8 dtype semantics" {
     var output_data: [input_data.len]i8 = undefined;
 
     const input: zgc.Tensor.View(i8, 1) = .{
-        .data = &input_data,
+        .storage = &input_data,
         .shape = .{input_data.len},
+        .strides = .{1},
+        .offset = 0,
     };
     const output: zgc.Tensor.View(i8, 1) = .{
-        .data = &output_data,
+        .storage = &output_data,
         .shape = .{output_data.len},
+        .strides = .{1},
+        .offset = 0,
     };
 
     comptime std.debug.assert(@TypeOf(input).dtype.kind() == .signed_integer);
 
-    const op: zgc.Op = .relu;
+    const op: zgc.Op = .{ .compute = .relu };
     op.execute(.{input}, output);
 
     try std.testing.expectEqualSlices(i8, &.{ 0, 0, 0, 2, 127 }, &output_data);
+}
+
+test "relu respects contiguous view offsets" {
+    var input_storage = [_]f32{ 99, -2, 3, -4, 5, 99 };
+    var output_storage: [7]f32 = @splat(99);
+
+    const input: zgc.Tensor.View(f32, 1) = .{
+        .storage = &input_storage,
+        .shape = .{4},
+        .strides = .{1},
+        .offset = 1,
+    };
+    const output: zgc.Tensor.View(f32, 1) = .{
+        .storage = &output_storage,
+        .shape = .{4},
+        .strides = .{1},
+        .offset = 2,
+    };
+
+    const op: zgc.Op = .{ .compute = .relu };
+    op.execute(.{input}, output);
+
+    try std.testing.expectEqualSlices(
+        f32,
+        &.{ 99, 99, 0, 3, 0, 5, 99 },
+        &output_storage,
+    );
 }

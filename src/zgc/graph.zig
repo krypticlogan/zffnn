@@ -10,6 +10,10 @@ pub const Node = struct {
     input_start: usize,
     input_count: usize,
     result: Tensor.Id,
+
+    kind: Kind,
+
+    pub const Kind = Op.Kind;
 };
 
 pub fn Graph(comptime capacity: Capacity) type {
@@ -33,7 +37,6 @@ pub fn Graph(comptime capacity: Capacity) type {
         pub fn init() Self {
             return Self{};
         }
-
 
         pub fn insertSource(g: *Self, comptime source_index: usize, source: Tensor.Source) void {
             g.sources[source_index] = source;
@@ -85,7 +88,10 @@ pub fn Graph(comptime capacity: Capacity) type {
             std.debug.print("Nodes:\n", .{});
             for (g.nodes[0..g.node_ct], 0..) |maybe_node, id| {
                 const node = maybe_node.?;
-                std.debug.print("  n{d}: ", .{id});
+                std.debug.print(
+                    "  n{d} [{s}]: ",
+                    .{ id, @tagName(node.kind) },
+                );
                 node.op.debugPrint();
                 std.debug.print("(", .{});
 
@@ -182,7 +188,10 @@ pub fn Graph(comptime capacity: Capacity) type {
 
             const node = g.nodes[producer_id].?;
             debugPrintTreePrefix(depth + 1, true, ancestor_is_last);
-            std.debug.print("n{d} ", .{producer_id});
+            std.debug.print(
+                "n{d} [{s}] ",
+                .{ producer_id, @tagName(node.kind) },
+            );
             node.op.debugPrint();
             std.debug.print("\n", .{});
 

@@ -57,6 +57,10 @@ pub fn Model(
 
         fn executeNode(model: *Self, comptime node_id: Graph.Node.Id) void {
             const node = graph.nodes[node_id].?;
+            const compute = switch (node.op) {
+                .compute => |op| op,
+                .view => return,
+            };
             const InputViews = comptime blk: {
                 var input_types: [node.input_count]type = undefined;
                 for (0..node.input_count) |input_index| {
@@ -77,7 +81,7 @@ pub fn Model(
             }
 
             const output = model.tensorView(node.result);
-            node.op.execute(inputs, output);
+            compute.execute(inputs, output);
         }
 
         fn tensorView(model: *Self, comptime tensor_id: Tensor.Id) blk: {
@@ -87,12 +91,14 @@ pub fn Model(
         } {
             const info = graph.tensors[tensor_id].?;
             const T = info.dtype.Scalar();
-            const bytes = model.tensorBytes(tensor_id);
+            const bytes = model.tensorBytes(info.storage_tensor);
             const aligned_bytes: []align(@alignOf(T)) u8 = @alignCast(bytes);
 
             return .{
-                .data = std.mem.bytesAsSlice(T, aligned_bytes),
+                .storage = std.mem.bytesAsSlice(T, aligned_bytes),
                 .shape = info.shape.dims[0..info.shape.rank].*,
+                .strides = info.layout.strides[0..info.shape.rank].*,
+                .offset = info.layout.offset,
             };
         }
 
@@ -102,13 +108,15 @@ pub fn Model(
         } {
             const info = graph.tensors[tensor_id].?;
             const T = info.dtype.Scalar();
-            const region = plan.tensor_regions[tensor_id];
+            const region = plan.tensor_regions[info.storage_tensor];
             const bytes = model.memory[region.offset .. region.offset + region.len_bytes];
             const aligned_bytes: []align(@alignOf(T)) const u8 = @alignCast(bytes);
 
             return .{
-                .data = std.mem.bytesAsSlice(T, aligned_bytes),
+                .storage = std.mem.bytesAsSlice(T, aligned_bytes),
                 .shape = info.shape.dims[0..info.shape.rank].*,
+                .strides = info.layout.strides[0..info.shape.rank].*,
+                .offset = info.layout.offset,
             };
         }
 

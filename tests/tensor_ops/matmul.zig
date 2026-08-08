@@ -14,19 +14,25 @@ test "matmul multiplies contiguous row-major rank-2 tensors" {
     var output_data: [4]f32 = @splat(std.math.nan(f32));
 
     const lhs: zgc.Tensor.View(f32, 2) = .{
-        .data = &lhs_data,
+        .storage = &lhs_data,
         .shape = .{ 2, 3 },
+        .strides = .{ 3, 1 },
+        .offset = 0,
     };
     const rhs: zgc.Tensor.View(f32, 2) = .{
-        .data = &rhs_data,
+        .storage = &rhs_data,
         .shape = .{ 3, 2 },
+        .strides = .{ 2, 1 },
+        .offset = 0,
     };
     const output: zgc.Tensor.View(f32, 2) = .{
-        .data = &output_data,
+        .storage = &output_data,
         .shape = .{ 2, 2 },
+        .strides = .{ 2, 1 },
+        .offset = 0,
     };
 
-    const op: zgc.Op = .matmul;
+    const op: zgc.Op = .{ .compute = .matmul };
     op.execute(.{ lhs, rhs }, output);
 
     try std.testing.expectEqualSlices(
@@ -65,20 +71,60 @@ test "matmul handles a native SIMD chunk followed by a column tail" {
     }
 
     const lhs: zgc.Tensor.View(f32, 2) = .{
-        .data = &lhs_data,
+        .storage = &lhs_data,
         .shape = .{ m, k_len },
+        .strides = .{ k_len, 1 },
+        .offset = 0,
     };
     const rhs: zgc.Tensor.View(f32, 2) = .{
-        .data = &rhs_data,
+        .storage = &rhs_data,
         .shape = .{ k_len, n },
+        .strides = .{ n, 1 },
+        .offset = 0,
     };
     const output: zgc.Tensor.View(f32, 2) = .{
-        .data = &output_data,
+        .storage = &output_data,
         .shape = .{ m, n },
+        .strides = .{ n, 1 },
+        .offset = 0,
     };
 
-    const op: zgc.Op = .matmul;
+    const op: zgc.Op = .{ .compute = .matmul };
     op.execute(.{ lhs, rhs }, output);
 
     try std.testing.expectEqualSlices(f32, &expected, &output_data);
+}
+
+test "matmul respects contiguous view offsets" {
+    var lhs_storage = [_]f32{ 99, 1, 2, 3, 4, 99 };
+    var rhs_storage = [_]f32{ 99, 99, 5, 6, 7, 8 };
+    var output_storage: [7]f32 = @splat(99);
+
+    const lhs: zgc.Tensor.View(f32, 2) = .{
+        .storage = &lhs_storage,
+        .shape = .{ 2, 2 },
+        .strides = .{ 2, 1 },
+        .offset = 1,
+    };
+    const rhs: zgc.Tensor.View(f32, 2) = .{
+        .storage = &rhs_storage,
+        .shape = .{ 2, 2 },
+        .strides = .{ 2, 1 },
+        .offset = 2,
+    };
+    const output: zgc.Tensor.View(f32, 2) = .{
+        .storage = &output_storage,
+        .shape = .{ 2, 2 },
+        .strides = .{ 2, 1 },
+        .offset = 1,
+    };
+
+    const op: zgc.Op = .{ .compute = .matmul };
+    op.execute(.{ lhs, rhs }, output);
+
+    try std.testing.expectEqualSlices(
+        f32,
+        &.{ 99, 19, 22, 43, 50, 99, 99 },
+        &output_storage,
+    );
 }
