@@ -33,6 +33,7 @@ test "validation checks arity ranks and dtypes" {
         .{ .dtype = .f32, .rank = 2 },
         .{ .dtype = .f16, .rank = 1 },
     };
+    const integer = CountedValue{ .dtype = .i8, .rank = 1 };
 
     try std.testing.expect(zgc.Validation.inputCountIs(&inputs, 2));
     try std.testing.expect(zgc.Validation.ranksAre(&inputs, &.{ 2, 2 }));
@@ -40,6 +41,8 @@ test "validation checks arity ranks and dtypes" {
     try std.testing.expect(zgc.Validation.dtypesMatch(&inputs));
     try std.testing.expect(!zgc.Validation.ranksMatch(&mismatched));
     try std.testing.expect(!zgc.Validation.dtypesMatch(&mismatched));
+    try std.testing.expect(zgc.Validation.dtypeKindIs(inputs[0], .float));
+    try std.testing.expect(!zgc.Validation.dtypeKindIs(integer, .float));
 }
 
 test "validation checks shapes extents and axes" {
@@ -55,4 +58,17 @@ test "validation checks shapes extents and axes" {
     try std.testing.expect(zgc.Validation.axisIsValid(lhs, 1));
     try std.testing.expect(!zgc.Validation.axisIsValid(lhs, -1));
     try std.testing.expect(!zgc.Validation.axisIsValid(lhs, 2));
+}
+
+test "validation checks trailing-axis broadcast compatibility" {
+    const Value = ShapedValue(3);
+    const matrix = Value{ .dtype = .f32, .shape = .init(&.{ 2, 3 }) };
+    const vector = Value{ .dtype = .f32, .shape = .init(&.{3}) };
+    const outer_lhs = Value{ .dtype = .f32, .shape = .init(&.{ 2, 1 }) };
+    const outer_rhs = Value{ .dtype = .f32, .shape = .init(&.{ 1, 4 }) };
+    const invalid = Value{ .dtype = .f32, .shape = .init(&.{2}) };
+
+    try std.testing.expect(zgc.Validation.shapesBroadcast(matrix, vector));
+    try std.testing.expect(zgc.Validation.shapesBroadcast(outer_lhs, outer_rhs));
+    try std.testing.expect(!zgc.Validation.shapesBroadcast(matrix, invalid));
 }

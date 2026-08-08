@@ -1,15 +1,18 @@
 const Op = @import("op.zig").Op;
 const contraction = @import("kernels/contraction.zig");
 const elementwise = @import("kernels/elementwise.zig");
+const reduction = @import("kernels/reduction.zig");
+const special = @import("kernels/special.zig");
 
 /// Route graph operations to a kernel family.
 pub fn execute(comptime op: Op.Compute, inputs: anytype, output: anytype) void {
     switch (op) {
         .relu => elementwise.relu(inputs[0], output),
-        .exp => @compileError("exp kernel is not implemented"),
+        .exp => elementwise.exp(inputs[0], output),
         .add => elementwise.add(inputs[0], inputs[1], output),
-        .sub => @compileError("sub kernel is not implemented"),
+        .sub => elementwise.sub(inputs[0], inputs[1], output),
         .matmul => contraction.matmul(inputs[0], inputs[1], output),
-        .softmax => @compileError("softmax kernel is not implemented"),
+        .sum => |attrs| reduction.sum(inputs[0], output, attrs.axis),
+        .softmax => |attrs| special.softmax(inputs[0], output, attrs.axis),
     }
 }

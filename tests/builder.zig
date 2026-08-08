@@ -121,3 +121,69 @@ test "transpose creates an aliasing view node" {
     try std.testing.expectEqual([3]usize{ 4, 3, 2 }, transposed.shape.dims);
     try std.testing.expectEqual([3]isize{ 1, 4, 12 }, transposed.layout.strides);
 }
+
+fn buildReduction(builder: anytype) void {
+    const input = builder.input(Sources.rank_four, .f32, &.{ 2, 3, 4 });
+    const reduced = builder.sum(input, 1);
+    builder.output(builder.softmax(reduced, 1));
+}
+
+test "sum removes its selected axis and softmax preserves the result shape" {
+    const counts = comptime blk: {
+        var backend = CountingBackend{};
+        var builder = Builder(CountingBackend){ .backend = &backend };
+        buildReduction(&builder);
+        break :blk backend.counts;
+    };
+    const graph = comptime blk: {
+        const Backend = GraphBackend(counts);
+        var backend = Backend.init();
+        var builder = Builder(Backend){ .backend = &backend };
+        buildReduction(&builder);
+        break :blk backend.finish();
+    };
+
+    try expect(graph.nodes[0].?.kind == .compute);
+    try expect(graph.nodes[1].?.kind == .compute);
+    try std.testing.expectEqualSlices(
+        usize,
+        &.{ 2, 4 },
+        graph.tensors[1].?.shape.slice(),
+    );
+    try std.testing.expectEqualSlices(
+        usize,
+        &.{ 2, 4 },
+        graph.tensors[2].?.shape.slice(),
+    );
+    try std.testing.expectEqual([3]isize{ 4, 1, 0 }, graph.tensors[1].?.layout.strides);
+}
+
+fn buildBroadcastAdd(builder: anytype) void {
+    const matrix = builder.input(Sources.lhs, .f32, &.{ 2, 1, 4 });
+    const bias = builder.parameter(Sources.rhs, .f32, &.{ 3, 1 });
+    builder.output(builder.add(matrix, bias));
+}
+
+test "binary elementwise operations infer their broadcast shape" {
+    const counts = comptime blk: {
+        var backend = CountingBackend{};
+        var builder = Builder(CountingBackend){ .backend = &backend };
+        buildBroadcastAdd(&builder);
+        break :blk backend.counts;
+    };
+    const graph = comptime blk: {
+        const Backend = GraphBackend(counts);
+        var backend = Backend.init();
+        var builder = Builder(Backend){ .backend = &backend };
+        buildBroadcastAdd(&builder);
+        break :blk backend.finish();
+    };
+
+    try std.testing.expectEqual(@as(usize, 3), counts.max_rank);
+    try std.testing.expectEqualSlices(
+        usize,
+        &.{ 2, 3, 4 },
+        graph.tensors[2].?.shape.slice(),
+    );
+    try std.testing.expectEqual([3]isize{ 12, 4, 1 }, graph.tensors[2].?.layout.strides);
+}

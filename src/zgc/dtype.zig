@@ -15,7 +15,7 @@ pub const Dtype = enum {
             .i8 => i8,
         };
     }
-    
+
     pub fn fromScalar(comptime T: type) Dtype {
         return if (T == f32)
             .f32
@@ -27,7 +27,7 @@ pub const Dtype = enum {
             @compileError("unsupported tensor scalar type: " ++ @typeName(T));
     }
 
-    pub fn kind(comptime dtype: Dtype) Kind {
+    pub fn kind(dtype: Dtype) Kind {
         return switch (dtype) {
             .f32, .f16 => .float,
             .i8 => .signed_integer,

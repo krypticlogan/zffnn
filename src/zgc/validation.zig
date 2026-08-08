@@ -44,8 +44,29 @@ pub fn dtypeIs(value: anytype, comptime expected: Dtype) bool {
     return value.dtype == expected;
 }
 
+pub fn dtypeKindIs(value: anytype, comptime expected: Dtype.Kind) bool {
+    return value.dtype.kind() == expected;
+}
+
 pub fn shapesMatch(lhs: anytype, rhs: anytype) bool {
     return std.mem.eql(usize, lhs.shape.slice(), rhs.shape.slice());
+}
+
+pub fn extentsBroadcast(lhs_extent: usize, rhs_extent: usize) bool {
+    return lhs_extent == rhs_extent or lhs_extent == 1 or rhs_extent == 1;
+}
+
+pub fn shapesBroadcast(lhs: anytype, rhs: anytype) bool {
+    const lhs_shape = lhs.shape.slice();
+    const rhs_shape = rhs.shape.slice();
+    const aligned_rank = @min(lhs_shape.len, rhs_shape.len);
+
+    for (0..aligned_rank) |axis_from_end| {
+        const lhs_extent = lhs_shape[lhs_shape.len - 1 - axis_from_end];
+        const rhs_extent = rhs_shape[rhs_shape.len - 1 - axis_from_end];
+        if (!extentsBroadcast(lhs_extent, rhs_extent)) return false;
+    }
+    return true;
 }
 
 pub fn extentsMatch(
@@ -82,12 +103,7 @@ pub fn requireRanks(
     comptime expected: []const usize,
 ) void {
     if (!ranksAre(inputs, expected)) {
-        @compileError(
-            std.fmt.comptimePrint(
-                operation ++ " input ranks are invalid\nExpected: {any}", 
-                .{expected}
-            )
-        );
+        @compileError(std.fmt.comptimePrint(operation ++ " input ranks are invalid\nExpected: {any}", .{expected}));
     }
 }
 
@@ -110,6 +126,16 @@ pub fn requireDtype(
 ) void {
     if (!dtypeIs(value, expected)) {
         @compileError(operation ++ " does not support the provided dtype");
+    }
+}
+
+pub fn requireDtypeKind(
+    comptime operation: []const u8,
+    value: anytype,
+    comptime expected: Dtype.Kind,
+) void {
+    if (!dtypeKindIs(value, expected)) {
+        @compileError(operation ++ " does not support the provided dtype kind");
     }
 }
 

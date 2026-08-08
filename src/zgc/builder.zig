@@ -61,6 +61,17 @@ pub fn Builder(comptime Backend: type) type {
             return self.backend.addNode(.{ .compute = .matmul }, &.{ lhs, rhs });
         }
 
+        pub fn sum(
+            self: *Self,
+            comptime tensor: ValueType,
+            comptime axis: i8,
+        ) ValueType {
+            return self.backend.addNode(
+                .{ .compute = .{ .sum = .{ .axis = axis } } },
+                &.{tensor},
+            );
+        }
+
         pub fn softmax(
             self: *Self,
             comptime tensor: ValueType,

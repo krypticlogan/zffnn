@@ -37,3 +37,24 @@ pub fn widenScalar(
         .signed_integer => @as(AccT, @intCast(value)),
     };
 }
+
+pub fn narrowVector(
+    comptime dtype: Dtype,
+    comptime len: usize,
+    values: AccumulatorVector(dtype, len),
+) dtype.Vector(len) {
+    return switch (comptime dtype.kind()) {
+        .float => @floatCast(values),
+        .signed_integer => @intCast(values),
+    };
+}
+
+pub fn narrowScalar(
+    comptime dtype: Dtype,
+    value: AccumulatorScalar(dtype),
+) dtype.Scalar() {
+    return switch (comptime dtype.kind()) {
+        .float => @floatCast(value),
+        .signed_integer => @intCast(value),
+    };
+}

@@ -38,11 +38,39 @@ pub fn View(comptime T: type, comptime tensor_rank: usize) type {
             indices: [rank]usize,
         ) usize {
             var offset: isize = @intCast(self.offset);
-            for (self.strides, indices) |stride, index| {
+            for (self.strides, indices, 0..) |stride, index, axis| {
+                std.debug.assert(index < self.shape[axis]);
                 offset += @as(isize, @intCast(index)) * stride;
             }
             std.debug.assert(offset >= 0);
-            return @intCast(offset);
+            const storage_index: usize = @intCast(offset);
+            std.debug.assert(storage_index < self.storage.len);
+            return storage_index;
+        }
+
+        pub fn elementOffsetFromLinear(
+            self: *const Self,
+            linear_index: usize,
+        ) usize {
+            std.debug.assert(linear_index < self.len());
+            if (comptime rank == 0) {
+                std.debug.assert(self.offset < self.storage.len);
+                return self.offset;
+            }
+            var remaining = linear_index;
+            var offset: isize = @intCast(self.offset);
+            var axis = rank;
+            while (axis > 0) {
+                axis -= 1;
+                const extent = self.shape[axis];
+                const index = remaining % extent;
+                remaining /= extent;
+                offset += @as(isize, @intCast(index)) * self.strides[axis];
+            }
+            std.debug.assert(offset >= 0);
+            const storage_index: usize = @intCast(offset);
+            std.debug.assert(storage_index < self.storage.len);
+            return storage_index;
         }
 
         pub fn get(
@@ -54,7 +82,7 @@ pub fn View(comptime T: type, comptime tensor_rank: usize) type {
         }
 
         pub fn set(
-            self: *Self,
+            self: *const Self,
             indices: [rank]usize,
             value: T,
         ) void {
@@ -77,6 +105,56 @@ pub fn View(comptime T: type, comptime tensor_rank: usize) type {
         pub fn contiguousSlice(self: *const Self) ?[]T {
             if (!self.isContiguous()) return null;
             return self.storage[self.offset..][0..self.len()];
+        }
+
+        /// Select one logical line along `axis`. `slice_index` addresses the
+        /// remaining axes in row-major logical order. The returned view aliases
+        /// the same storage and preserves the selected axis stride.
+        pub fn axisSlice(
+            self: *const Self,
+            axis: usize,
+            slice_index: usize,
+        ) View(T, 1) {
+            const slice_offset = axisSliceOffset(self, axis, slice_index);
+            return .{
+                .storage = self.storage,
+                .shape = .{self.shape[axis]},
+                .strides = .{self.strides[axis]},
+                .offset = slice_offset,
+            };
+        }
+
+        /// Expand this view to a compile-time-known target rank. Broadcast
+        /// compatibility is established by graph validation; singleton and
+        /// newly introduced leading axes are represented with zero strides.
+        pub fn broadcastTo(
+            self: *const Self,
+            comptime target_rank: usize,
+            target_shape: [target_rank]usize,
+        ) View(T, target_rank) {
+            if (comptime rank > target_rank) {
+                @compileError("broadcast target rank cannot be smaller than its source rank");
+            }
+
+            var result = View(T, target_rank){
+                .storage = self.storage,
+                .shape = target_shape,
+                .strides = @splat(0),
+                .offset = self.offset,
+            };
+
+            if (comptime rank > 0) {
+                var source_axis = rank;
+                var target_axis = target_rank;
+                while (source_axis > 0) {
+                    source_axis -= 1;
+                    target_axis -= 1;
+                    if (self.shape[source_axis] == target_shape[target_axis]) {
+                        result.strides[target_axis] = self.strides[source_axis];
+                    }
+                }
+            }
+            return result;
         }
     };
 }
@@ -102,11 +180,39 @@ pub fn ConstView(comptime T: type, comptime tensor_rank: usize) type {
             indices: [rank]usize,
         ) usize {
             var offset: isize = @intCast(self.offset);
-            for (self.strides, indices) |stride, index| {
+            for (self.strides, indices, 0..) |stride, index, axis| {
+                std.debug.assert(index < self.shape[axis]);
                 offset += @as(isize, @intCast(index)) * stride;
             }
             std.debug.assert(offset >= 0);
-            return @intCast(offset);
+            const storage_index: usize = @intCast(offset);
+            std.debug.assert(storage_index < self.storage.len);
+            return storage_index;
+        }
+
+        pub fn elementOffsetFromLinear(
+            self: *const Self,
+            linear_index: usize,
+        ) usize {
+            std.debug.assert(linear_index < self.len());
+            if (comptime rank == 0) {
+                std.debug.assert(self.offset < self.storage.len);
+                return self.offset;
+            }
+            var remaining = linear_index;
+            var offset: isize = @intCast(self.offset);
+            var axis = rank;
+            while (axis > 0) {
+                axis -= 1;
+                const extent = self.shape[axis];
+                const index = remaining % extent;
+                remaining /= extent;
+                offset += @as(isize, @intCast(index)) * self.strides[axis];
+            }
+            std.debug.assert(offset >= 0);
+            const storage_index: usize = @intCast(offset);
+            std.debug.assert(storage_index < self.storage.len);
+            return storage_index;
         }
 
         pub fn get(
@@ -133,7 +239,82 @@ pub fn ConstView(comptime T: type, comptime tensor_rank: usize) type {
             if (!self.isContiguous()) return null;
             return self.storage[self.offset..][0..self.len()];
         }
+
+        /// Read-only counterpart to `View.axisSlice`.
+        pub fn axisSlice(
+            self: *const Self,
+            axis: usize,
+            slice_index: usize,
+        ) ConstView(T, 1) {
+            const slice_offset = axisSliceOffset(self, axis, slice_index);
+            return .{
+                .storage = self.storage,
+                .shape = .{self.shape[axis]},
+                .strides = .{self.strides[axis]},
+                .offset = slice_offset,
+            };
+        }
+
+        /// Read-only counterpart to `View.broadcastTo`.
+        pub fn broadcastTo(
+            self: *const Self,
+            comptime target_rank: usize,
+            target_shape: [target_rank]usize,
+        ) ConstView(T, target_rank) {
+            if (comptime rank > target_rank) {
+                @compileError("broadcast target rank cannot be smaller than its source rank");
+            }
+
+            var result = ConstView(T, target_rank){
+                .storage = self.storage,
+                .shape = target_shape,
+                .strides = @splat(0),
+                .offset = self.offset,
+            };
+
+            if (comptime rank > 0) {
+                var source_axis = rank;
+                var target_axis = target_rank;
+                while (source_axis > 0) {
+                    source_axis -= 1;
+                    target_axis -= 1;
+                    if (self.shape[source_axis] == target_shape[target_axis]) {
+                        result.strides[target_axis] = self.strides[source_axis];
+                    }
+                }
+            }
+            return result;
+        }
     };
+}
+
+fn axisSliceOffset(view: anytype, axis: usize, slice_index: usize) usize {
+    const rank = @TypeOf(view.*).rank;
+    comptime std.debug.assert(rank > 0);
+    std.debug.assert(axis < rank);
+
+    var slice_count: usize = 1;
+    for (view.shape, 0..) |extent, current_axis| {
+        if (current_axis != axis) slice_count *= extent;
+    }
+    std.debug.assert(slice_index < slice_count);
+
+    var remaining = slice_index;
+    var result: isize = @intCast(view.offset);
+    var current_axis = rank;
+    while (current_axis > 0) {
+        current_axis -= 1;
+        if (current_axis == axis) continue;
+        const extent = view.shape[current_axis];
+        const index = remaining % extent;
+        remaining /= extent;
+        result += @as(isize, @intCast(index)) * view.strides[current_axis];
+    }
+
+    std.debug.assert(result >= 0);
+    const storage_index: usize = @intCast(result);
+    std.debug.assert(storage_index <= view.storage.len);
+    return storage_index;
 }
 
 pub fn Layout(comptime max_rank: usize) type {
