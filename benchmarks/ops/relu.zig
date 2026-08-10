@@ -5,7 +5,10 @@ const element_count = 16 * 1024;
 
 pub const Benchmark = struct {
     pub const name = "relu/f32/16k";
+    pub const default_iterations = 5_000;
+    pub const default_warmup_iterations = 500;
     pub const work_items_per_invocation: f64 = element_count;
+    pub const work_unit = "elements";
     pub const bytes_per_invocation: f64 = element_count * @sizeOf(f32) * 2;
 
     input_data: [element_count]f32,
@@ -25,14 +28,18 @@ pub const Benchmark = struct {
 
     pub fn run(self: *Benchmark, iterations: usize) void {
         const input: zgc.Tensor.View(f32, 1) = .{
-            .data = &self.input_data,
+            .storage = &self.input_data,
             .shape = .{element_count},
+            .strides = .{1},
+            .offset = 0,
         };
         const output: zgc.Tensor.View(f32, 1) = .{
-            .data = &self.output_data,
+            .storage = &self.output_data,
             .shape = .{element_count},
+            .strides = .{1},
+            .offset = 0,
         };
-        const op: zgc.Op = .relu;
+        const op: zgc.Op = .{ .compute = .relu };
         for (0..iterations) |_| {
             op.execute(.{input}, output);
             std.mem.doNotOptimizeAway(&self.output_data);

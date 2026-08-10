@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(gen);
 
     // library
-    _ = b.addModule("zgc", .{
+    const zgc_mod = b.addModule("zgc", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
@@ -58,4 +58,32 @@ pub fn build(b: *std.Build) void {
     const run_mod_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
+
+    // benchmarks
+    const benchmark_op = b.option([]const u8, "op", "Tensor operation to benchmark") orelse "all";
+    const benchmark_iterations = b.option(usize, "iterations", "Operation invocations per timed run (0 selects the case default)") orelse 0;
+    const benchmark_runs = b.option(usize, "runs", "Number of timed runs") orelse 10;
+    const benchmark_warmup = b.option(usize, "warmup_iterations", "Untimed warmup invocations (0 selects the case default)") orelse 0;
+
+    const benchmark_options = b.addOptions();
+    benchmark_options.addOption([]const u8, "op", benchmark_op);
+    benchmark_options.addOption(usize, "iterations", benchmark_iterations);
+    benchmark_options.addOption(usize, "runs", benchmark_runs);
+    benchmark_options.addOption(usize, "warmup_iterations", benchmark_warmup);
+
+    const benchmark_exe = b.addExecutable(.{
+        .name = "zgc-benchmark",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("benchmarks/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zgc", .module = zgc_mod },
+                .{ .name = "build_options", .module = benchmark_options.createModule() },
+            },
+        }),
+    });
+    const run_benchmark = b.addRunArtifact(benchmark_exe);
+    const benchmark_step = b.step("benchmark", "Benchmark the operation selected by -Dop");
+    benchmark_step.dependOn(&run_benchmark.step);
 }

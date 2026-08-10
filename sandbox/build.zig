@@ -63,30 +63,4 @@ pub fn build(b: *std.Build) void {
     disassembler.addArtifactArg(inspect_exe);
     const inspect_model_step = b.step("inspect-model", "Disassemble the lean model execution symbol");
     inspect_model_step.dependOn(&disassembler.step);
-
-    const op_name = b.option([]const u8, "op", "Tensor operation to benchmark") orelse "relu";
-    const iterations = b.option(usize, "iterations", "Operation invocations per timed run") orelse 20_000;
-    const runs = b.option(usize, "runs", "Number of timed runs") orelse 10;
-    const warmup_iterations = b.option(usize, "warmup_iterations", "Untimed warmup invocations") orelse 2_000;
-    const benchmark_options = b.addOptions();
-    benchmark_options.addOption([]const u8, "op", op_name);
-    benchmark_options.addOption(usize, "iterations", iterations);
-    benchmark_options.addOption(usize, "runs", runs);
-    benchmark_options.addOption(usize, "warmup_iterations", warmup_iterations);
-
-    const benchmark_exe = b.addExecutable(.{
-        .name = "zgc-op-benchmark",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/benchmarks/ops.zig"),
-            .target = target,
-            .optimize = optimize,
-            .imports = &.{
-                .{ .name = "zgc", .module = zgc_mod },
-                .{ .name = "build_options", .module = benchmark_options.createModule() },
-            },
-        }),
-    });
-    const run_benchmark = b.addRunArtifact(benchmark_exe);
-    const benchmark_step = b.step("benchmark-op", "Benchmark the operation selected by -Dop");
-    benchmark_step.dependOn(&run_benchmark.step);
 }

@@ -61,11 +61,7 @@ pub fn Builder(comptime Backend: type) type {
             return self.backend.addNode(.{ .compute = .matmul }, &.{ lhs, rhs });
         }
 
-        pub fn sum(
-            self: *Self,
-            comptime tensor: ValueType,
-            comptime axis: i8,
-        ) ValueType {
+        pub fn sum(self: *Self, comptime tensor: ValueType, comptime axis: i8) ValueType {
             return self.backend.addNode(
                 .{ .compute = .{ .sum = .{ .axis = axis } } },
                 &.{tensor},
@@ -78,17 +74,15 @@ pub fn Builder(comptime Backend: type) type {
             comptime axis: i8,
         ) ValueType {
             return self.backend.addNode(
-                .{ .compute = .{ .softmax = .{ .axis = axis } } },
+                .{ .compute = .{ 
+                    .softmax = .{ .axis = axis } 
+                } },
                 &.{tensor},
             );
         }
 
         pub fn transpose(
-            self: *Self,
-            comptime tensor: ValueType,
-            comptime axis_a: i8,
-            comptime axis_b: i8,
-        ) ValueType {
+            self: *Self, comptime tensor: ValueType, comptime axis_a: i8, comptime axis_b: i8) ValueType {
             return self.backend.addNode(
                 .{ .view = .{ .transpose = .{
                     .axis_a = axis_a,

@@ -39,10 +39,10 @@ Run the lean artifact without adding a timing or tracing harness:
 zig build run-model -Doptimize=ReleaseFast
 ```
 
-Benchmark a tensor operation through the public library API:
+Benchmarks now live at the repository root. From there, run:
 
 ```sh
-zig build benchmark-op -Dop=relu -Doptimize=ReleaseFast
+zig build benchmark -Dop=relu -Doptimize=ReleaseFast
 ```
 
 Each operation benchmark owns its input and output storage and constructs views
@@ -50,5 +50,4 @@ once per run. The direct hardware clock surrounds a batch of operation
 invocations, amortizing its two timer reads across the entire batch. Configure
 the measurement with `-Diterations`, `-Druns`, and `-Dwarmup_iterations`.
 
-Add another case under `src/benchmarks/ops/`, then extend `SelectedBenchmark`
-in `src/benchmarks/ops.zig` with its `-Dop` name.
+See `../benchmarks/README.md` for results and guidance on adding cases.
