@@ -5,28 +5,26 @@ const Sources = enum(usize) {
     input,
     rank_four,
 };
+const Definition = zgc.DefinitionBackend(Sources, .{
+    .max_rank = 4,
+    .max_nodes = 4,
+    .max_tensors = 6,
+    .max_input_refs = 6,
+    .max_outputs = 2,
+});
 
-fn buildRelu(builder: anytype) void {
+fn buildRelu(builder: *Definition) void {
     const input = builder.input(Sources.input, .f32, &.{ 2, 3 });
     builder.output(builder.relu(input));
 }
 
 test "model loads a source, executes relu, and exposes its output" {
-    const capacities = comptime blk: {
-        var backend = zgc.CountingBackend{};
-        var builder = zgc.Builder(zgc.CountingBackend){ .backend = &backend };
+    const definition = comptime blk: {
+        var builder = Definition.init();
         buildRelu(&builder);
-        break :blk backend.counts;
+        break :blk builder.finish();
     };
-    const graph = comptime blk: {
-        const Backend = zgc.GraphBackend(capacities);
-        var backend = Backend.init();
-        var builder = zgc.Builder(Backend){ .backend = &backend };
-        buildRelu(&builder);
-        break :blk backend.finish();
-    };
-
-    const ReluModel = zgc.Model(capacities, graph);
+    const ReluModel = definition.model();
     var model = ReluModel.init();
 
     for (model.memory) |byte| {
@@ -51,7 +49,7 @@ test "model loads a source, executes relu, and exposes its output" {
     );
 }
 
-fn buildMixedRankOutputs(builder: anytype) void {
+fn buildMixedRankOutputs(builder: *Definition) void {
     const matrix = builder.input(Sources.input, .f32, &.{ 2, 3 });
     const rank_four = builder.input(Sources.rank_four, .f32, &.{ 2, 3, 4, 5 });
     builder.output(matrix);
@@ -59,21 +57,12 @@ fn buildMixedRankOutputs(builder: anytype) void {
 }
 
 test "model narrows graph layouts to each runtime view rank" {
-    const capacities = comptime blk: {
-        var backend = zgc.CountingBackend{};
-        var builder = zgc.Builder(zgc.CountingBackend){ .backend = &backend };
+    const definition = comptime blk: {
+        var builder = Definition.init();
         buildMixedRankOutputs(&builder);
-        break :blk backend.counts;
+        break :blk builder.finish();
     };
-    const graph = comptime blk: {
-        const Backend = zgc.GraphBackend(capacities);
-        var backend = Backend.init();
-        var builder = zgc.Builder(Backend){ .backend = &backend };
-        buildMixedRankOutputs(&builder);
-        break :blk backend.finish();
-    };
-
-    const MixedRankModel = zgc.Model(capacities, graph);
+    const MixedRankModel = definition.model();
     var model = MixedRankModel.init();
     const matrix = model.outputView(0);
     const rank_four = model.outputView(1);
@@ -84,27 +73,18 @@ test "model narrows graph layouts to each runtime view rank" {
     try std.testing.expectEqual([4]isize{ 60, 20, 5, 1 }, rank_four.strides);
 }
 
-fn buildTransposeOutput(builder: anytype) void {
+fn buildTransposeOutput(builder: *Definition) void {
     const input = builder.input(Sources.input, .f32, &.{ 2, 3 });
     builder.output(builder.transpose(input, 0, 1));
 }
 
 test "model exposes transpose as a strided view without another allocation" {
-    const capacities = comptime blk: {
-        var backend = zgc.CountingBackend{};
-        var builder = zgc.Builder(zgc.CountingBackend){ .backend = &backend };
+    const definition = comptime blk: {
+        var builder = Definition.init();
         buildTransposeOutput(&builder);
-        break :blk backend.counts;
+        break :blk builder.finish();
     };
-    const graph = comptime blk: {
-        const Backend = zgc.GraphBackend(capacities);
-        var backend = Backend.init();
-        var builder = zgc.Builder(Backend){ .backend = &backend };
-        buildTransposeOutput(&builder);
-        break :blk backend.finish();
-    };
-
-    const TransposeModel = zgc.Model(capacities, graph);
+    const TransposeModel = definition.model();
     var model = TransposeModel.init();
     const input_values = [_]f32{ 1, 2, 3, 4, 5, 6 };
     const input_bytes: [@sizeOf(@TypeOf(input_values))]u8 = @bitCast(input_values);
@@ -121,28 +101,19 @@ test "model exposes transpose as a strided view without another allocation" {
     try std.testing.expectEqual(@as(f32, 6), output.get(.{ 2, 1 }));
 }
 
-fn buildTransposeRelu(builder: anytype) void {
+fn buildTransposeRelu(builder: *Definition) void {
     const input = builder.input(Sources.input, .f32, &.{ 2, 3 });
     const transposed = builder.transpose(input, 0, 1);
     builder.output(builder.relu(transposed));
 }
 
 test "compute kernels consume graph-produced strided views" {
-    const capacities = comptime blk: {
-        var backend = zgc.CountingBackend{};
-        var builder = zgc.Builder(zgc.CountingBackend){ .backend = &backend };
+    const definition = comptime blk: {
+        var builder = Definition.init();
         buildTransposeRelu(&builder);
-        break :blk backend.counts;
+        break :blk builder.finish();
     };
-    const graph = comptime blk: {
-        const Backend = zgc.GraphBackend(capacities);
-        var backend = Backend.init();
-        var builder = zgc.Builder(Backend){ .backend = &backend };
-        buildTransposeRelu(&builder);
-        break :blk backend.finish();
-    };
-
-    const TransposeReluModel = zgc.Model(capacities, graph);
+    const TransposeReluModel = definition.model();
     var model = TransposeReluModel.init();
     const input_values = [_]f32{ -1, 2, -3, 4, -5, 6 };
     const input_bytes: [@sizeOf(@TypeOf(input_values))]u8 = @bitCast(input_values);
@@ -159,7 +130,7 @@ test "compute kernels consume graph-produced strided views" {
     );
 }
 
-fn buildTransposeSoftmaxSum(builder: anytype) void {
+fn buildTransposeSoftmaxSum(builder: *Definition) void {
     const input = builder.input(Sources.input, .f32, &.{ 2, 3 });
     const transposed = builder.transpose(input, 0, 1);
     const probabilities = builder.softmax(transposed, 1);
@@ -167,21 +138,12 @@ fn buildTransposeSoftmaxSum(builder: anytype) void {
 }
 
 test "model runs softmax and sum after a strided transpose" {
-    const capacities = comptime blk: {
-        var backend = zgc.CountingBackend{};
-        var builder = zgc.Builder(zgc.CountingBackend){ .backend = &backend };
+    const definition = comptime blk: {
+        var builder = Definition.init();
         buildTransposeSoftmaxSum(&builder);
-        break :blk backend.counts;
+        break :blk builder.finish();
     };
-    const graph = comptime blk: {
-        const Backend = zgc.GraphBackend(capacities);
-        var backend = Backend.init();
-        var builder = zgc.Builder(Backend){ .backend = &backend };
-        buildTransposeSoftmaxSum(&builder);
-        break :blk backend.finish();
-    };
-
-    const SoftmaxSumModel = zgc.Model(capacities, graph);
+    const SoftmaxSumModel = definition.model();
     var model = SoftmaxSumModel.init();
     const input_values = [_]f32{ 1, 2, 3, 4, 5, 6 };
     const input_bytes: [@sizeOf(@TypeOf(input_values))]u8 = @bitCast(input_values);
@@ -195,28 +157,19 @@ test "model runs softmax and sum after a strided transpose" {
     }
 }
 
-fn buildBroadcastBiasAdd(builder: anytype) void {
+fn buildBroadcastBiasAdd(builder: *Definition) void {
     const input = builder.input(Sources.input, .f32, &.{ 2, 3 });
     const bias = builder.parameter(Sources.rank_four, .f32, &.{3});
     builder.output(builder.add(input, bias));
 }
 
 test "model executes elementwise broadcasting inferred by the graph" {
-    const capacities = comptime blk: {
-        var backend = zgc.CountingBackend{};
-        var builder = zgc.Builder(zgc.CountingBackend){ .backend = &backend };
+    const definition = comptime blk: {
+        var builder = Definition.init();
         buildBroadcastBiasAdd(&builder);
-        break :blk backend.counts;
+        break :blk builder.finish();
     };
-    const graph = comptime blk: {
-        const Backend = zgc.GraphBackend(capacities);
-        var backend = Backend.init();
-        var builder = zgc.Builder(Backend){ .backend = &backend };
-        buildBroadcastBiasAdd(&builder);
-        break :blk backend.finish();
-    };
-
-    const BroadcastModel = zgc.Model(capacities, graph);
+    const BroadcastModel = definition.model();
     var model = BroadcastModel.init();
     const input_values = [_]f32{ 1, 2, 3, 4, 5, 6 };
     const bias_values = [_]f32{ 10, 20, 30 };

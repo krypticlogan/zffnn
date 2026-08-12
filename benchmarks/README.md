@@ -52,6 +52,8 @@ From the repository root:
 zig build benchmark -Dop=relu -Doptimize=ReleaseFast
 ```
 
+Without `-Dop`, the build runs the complete suite (`all`).
+
 Run the comparison suite with:
 
 ```sh

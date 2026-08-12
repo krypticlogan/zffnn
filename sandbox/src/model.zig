@@ -13,8 +13,15 @@ pub const Sources = enum(usize) {
     output_weights,
     output_bias,
 };
+pub const Definition = zgc.DefinitionBackend(Sources, .{
+    .max_rank = 2,
+    .max_nodes = 8,
+    .max_tensors = 16,
+    .max_input_refs = 16,
+    .max_outputs = 2,
+});
 
-fn defineGraph(builder: anytype) void {
+fn defineGraph(builder: *Definition) void {
     const input = builder.input(
         Sources.input,
         .f32,
@@ -53,22 +60,15 @@ fn defineGraph(builder: anytype) void {
     builder.output(builder.softmax(logits, 1));
 }
 
-pub const capacity = blk: {
-    var backend = zgc.CountingBackend{};
-    var builder = zgc.Builder(zgc.CountingBackend){ .backend = &backend };
+pub const definition = blk: {
+    var builder = Definition.init();
     defineGraph(&builder);
-    break :blk backend.counts;
+    break :blk builder.finish();
 };
 
-pub const graph = blk: {
-    const Backend = zgc.GraphBackend(capacity);
-    var backend = Backend.init();
-    var builder = zgc.Builder(Backend){ .backend = &backend };
-    defineGraph(&builder);
-    break :blk backend.finish();
-};
-
-pub const Model = zgc.Model(capacity, graph);
+pub const Model = definition.model();
+pub const capacity = Model.internal_capacity;
+pub const graph = Model.build_graph;
 
 pub const input_values = [_]f32{
     1, 2, 3,

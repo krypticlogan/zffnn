@@ -7,5 +7,4 @@ __pycache__
 zig-out
 *zig-pkg
 .DS_Store
-docs
 /benchmarks.md

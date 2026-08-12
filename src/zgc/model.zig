@@ -1,5 +1,4 @@
 const std = @import("std");
-const Builder = @import("builder.zig");
 const Graph = @import("graph.zig");
 const Storage = @import("storage.zig");
 const Tensor = @import("tensor.zig");

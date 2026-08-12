@@ -1,53 +1,80 @@
 # Model sandbox
-This is a sandbox environment used in development.
-It was chosen to be commited for users that want more insight or control to the library.
 
-Run the complete graph-building, memory-planning, loading, execution, and
-output flow with diagnostics:
+The sandbox is a standalone Zig package that consumes ZGC through its
+public package interface. 
+
+It acts as an example, demonstrating: 
+a complete typed definition,
+definition-driven model generation, 
+source loading, 
+execution, 
+diagnostics, 
+and generated-code inspection without relying on internal backend APIs.
+
+Run commands from this directory unless noted otherwise.
+
+## Diagnostic model run
 
 ```sh
-cd sandbox
 zig build run
 ```
 
-Build the lean binary used for code inspection:
+This prints the exact capacities discovered by the counting pass, the concrete
+graph and output tree, the memory plan, memory before and after execution, and
+the final output view.
+
+## Lean model artifact
+
+Build the binary used for generated-code inspection:
 
 ```sh
 zig build build-model -Doptimize=ReleaseFast
 ```
 
-The resulting binary is `zig-out/bin/zgc-model`. Its stable
-`zgc_run_model` symbol contains only model execution—no logging, timers, or
-instrumentation. Disassemble it directly with:
+The resulting artifact is `zig-out/bin/zgc-model`. Its exported
+`zgc_run_model` symbol contains model execution without logging or timing
+instrumentation.
+
+Run it directly:
+
+```sh
+zig build run-model -Doptimize=ReleaseFast
+```
+
+Disassemble only the stable execution symbol:
 
 ```sh
 zig build inspect-model -Doptimize=ReleaseFast
 ```
 
-On macOS, debugger inspection can begin with:
+On macOS, inspect it interactively with LLDB:
 
-```sh
+```text
 lldb zig-out/bin/zgc-model
 (lldb) breakpoint set --name zgc_run_model
 (lldb) run
 (lldb) disassemble --name zgc_run_model
 ```
 
-Run the lean artifact without adding a timing or tracing harness:
+## Model definition
+
+The example in `src/model.zig` uses the same public workflow expected of a
+consumer:
+
+1. Instantiate `DefinitionBackend` with a source enum and front-end bounds.
+2. Run the typed definition function once.
+3. Finish the definition and call `definition.model()`.
+4. Initialize the generated model, load sources, run, and retrieve an output
+   view.
+
+## Benchmarks
+
+Benchmarks are maintained at the repository root rather than duplicated in the
+sandbox. From the repository root, run:
 
 ```sh
-zig build run-model -Doptimize=ReleaseFast
+zig build benchmark -Doptimize=ReleaseFast
 ```
 
-Benchmarks now live at the repository root. From there, run:
-
-```sh
-zig build benchmark -Dop=relu -Doptimize=ReleaseFast
-```
-
-Each operation benchmark owns its input and output storage and constructs views
-once per run. The direct hardware clock surrounds a batch of operation
-invocations, amortizing its two timer reads across the entire batch. Configure
-the measurement with `-Diterations`, `-Druns`, and `-Dwarmup_iterations`.
-
-See `../benchmarks/README.md` for results and guidance on adding cases.
+See [benchmarks/README.md](../benchmarks/README.md) for individual selectors,
+methodology, and current results.

@@ -1,5 +1,4 @@
 const std = @import("std");
-const Builder = @import("builder.zig");
 const Tensor = @import("tensor.zig");
 const Graph = @import("graph.zig");
 const Dtype = @import("dtype.zig").Dtype;
