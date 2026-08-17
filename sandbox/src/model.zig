@@ -13,6 +13,7 @@ pub const Sources = enum(usize) {
     output_weights,
     output_bias,
 };
+
 pub const Definition = zgc.DefinitionBackend(Sources, .{
     .max_rank = 2,
     .max_nodes = 8,

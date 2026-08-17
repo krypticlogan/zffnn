@@ -3,8 +3,18 @@ const Tensor = @import("tensor.zig");
 const Graph = @import("graph.zig");
 const Dtype = @import("dtype.zig").Dtype;
 
-pub const StorageRegion = struct { offset: usize, len_bytes: usize, alignment: usize };
+pub const StorageRegion = struct { 
+    offset: usize, 
+    len_bytes: usize, 
+    alignment: usize 
+};
 
+pub const SourceStorage = union(enum) {
+      owned: StorageRegion,
+      embedded: []align(1) const u8,
+      external,
+  };
+  
 pub fn MemoryPlan(comptime capacities: Graph.Capacity, comptime g: Graph.Graph(capacities)) type {
     var memory_plan: [g.tensor_ct]StorageRegion = undefined;
 

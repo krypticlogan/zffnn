@@ -5,6 +5,7 @@ const Model = @import("../model.zig").Model;
 pub fn model(
     comptime Definition: type,
     comptime definition: Definition,
+    // comptime embeddings: []const []const u8,
 ) type {
     const Counting = CountingBackend(Definition);
     const capacity = Counting.count(definition);
