@@ -4,7 +4,7 @@ const zgc = @import("zgc");
 test "softmax is stable and normalizes along its axis" {
     var input_storage = [_]f32{ 1000, 1001, 1002, -1000, -1001, -1002 };
     var output_storage: [6]f32 = undefined;
-    const input: zgc.Tensor.View(f32, 2) = .{
+    const input: zgc.Tensor.ConstView(f32, 2) = .{
         .storage = &input_storage,
         .shape = .{ 2, 3 },
         .strides = .{ 3, 1 },
@@ -32,7 +32,7 @@ test "softmax is stable and normalizes along its axis" {
 test "softmax traverses a strided axis" {
     var input_storage = [_]f32{ 1, 2, 3, 4, 5, 6 };
     var output_storage: [6]f32 = undefined;
-    const input: zgc.Tensor.View(f32, 2) = .{
+    const input: zgc.Tensor.ConstView(f32, 2) = .{
         .storage = &input_storage,
         .shape = .{ 3, 2 },
         .strides = .{ 1, 3 },
@@ -64,7 +64,7 @@ test "softmax vectorizes a unit-stride axis and handles its tail" {
     const len = vector_len + 1;
     var input_storage: [len]f32 = @splat(0);
     var output_storage: [len]f32 = undefined;
-    const input: zgc.Tensor.View(f32, 1) = .{
+    const input: zgc.Tensor.ConstView(f32, 1) = .{
         .storage = &input_storage,
         .shape = .{len},
         .strides = .{1},

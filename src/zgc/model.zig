@@ -65,7 +65,7 @@ pub fn Model(
                 for (0..node.input_count) |input_index| {
                     const tensor_id = graph.input_refs[node.input_start + input_index].?;
                     const info = graph.tensors[tensor_id].?;
-                    input_types[input_index] = Tensor.View(
+                    input_types[input_index] = Tensor.ConstView(
                         info.dtype.Scalar(),
                         info.shape.rank,
                     );
@@ -76,7 +76,7 @@ pub fn Model(
             var inputs: InputViews = undefined;
             inline for (0..node.input_count) |input_index| {
                 const tensor_id = comptime graph.input_refs[node.input_start + input_index].?;
-                inputs[input_index] = model.tensorView(tensor_id);
+                inputs[input_index] = model.constTensorView(tensor_id);
             }
 
             const output = model.tensorView(node.result);

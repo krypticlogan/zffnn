@@ -37,7 +37,7 @@ fn ReductionBenchmark(
         }
 
         pub fn run(self: *Self, iterations: usize) void {
-            const input: zgc.Tensor.View(f32, 2) = .{
+            const input: zgc.Tensor.ConstView(f32, 2) = .{
                 .storage = &self.input_storage,
                 .shape = .{ rows, columns },
                 .strides = if (layout == .contiguous) .{ columns, 1 } else .{ 1, rows },

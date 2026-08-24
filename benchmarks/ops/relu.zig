@@ -27,7 +27,7 @@ pub const Benchmark = struct {
     }
 
     pub fn run(self: *Benchmark, iterations: usize) void {
-        const input: zgc.Tensor.View(f32, 1) = .{
+        const input: zgc.Tensor.ConstView(f32, 1) = .{
             .storage = &self.input_data,
             .shape = .{element_count},
             .strides = .{1},

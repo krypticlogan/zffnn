@@ -38,13 +38,13 @@ fn AddBenchmark(comptime layout: Layout, comptime benchmark_name: []const u8) ty
                 .{ columns, 1 }
             else
                 .{ 1, rows };
-            const lhs: zgc.Tensor.View(f32, 2) = .{
+            const lhs: zgc.Tensor.ConstView(f32, 2) = .{
                 .storage = &self.lhs_storage,
                 .shape = .{ rows, columns },
                 .strides = strides,
                 .offset = 0,
             };
-            const rhs: zgc.Tensor.View(f32, 2) = .{
+            const rhs: zgc.Tensor.ConstView(f32, 2) = .{
                 .storage = &self.rhs_storage,
                 .shape = .{ rows, columns },
                 .strides = strides,
@@ -91,13 +91,13 @@ pub const AddBroadcast = struct {
     }
 
     pub fn run(self: *Self, iterations: usize) void {
-        const matrix: zgc.Tensor.View(f32, 2) = .{
+        const matrix: zgc.Tensor.ConstView(f32, 2) = .{
             .storage = &self.matrix_storage,
             .shape = .{ rows, columns },
             .strides = .{ columns, 1 },
             .offset = 0,
         };
-        const bias: zgc.Tensor.View(f32, 1) = .{
+        const bias: zgc.Tensor.ConstView(f32, 1) = .{
             .storage = &self.bias_storage,
             .shape = .{columns},
             .strides = .{1},
@@ -140,7 +140,7 @@ pub const ExpContiguous = struct {
     }
 
     pub fn run(self: *Self, iterations: usize) void {
-        const input: zgc.Tensor.View(f32, 1) = .{
+        const input: zgc.Tensor.ConstView(f32, 1) = .{
             .storage = &self.input_storage,
             .shape = .{element_count},
             .strides = .{1},

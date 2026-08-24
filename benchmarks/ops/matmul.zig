@@ -40,13 +40,13 @@ fn MatmulBenchmark(
         }
 
         pub fn run(self: *Self, run_iterations: usize) void {
-            const lhs: zgc.Tensor.View(f32, 2) = .{
+            const lhs: zgc.Tensor.ConstView(f32, 2) = .{
                 .storage = &self.lhs_storage,
                 .shape = .{ m, k_len },
                 .strides = if (lhs_layout == .contiguous) .{ k_len, 1 } else .{ 1, m },
                 .offset = 0,
             };
-            const rhs: zgc.Tensor.View(f32, 2) = .{
+            const rhs: zgc.Tensor.ConstView(f32, 2) = .{
                 .storage = &self.rhs_storage,
                 .shape = .{ k_len, n },
                 .strides = if (rhs_layout == .contiguous) .{ n, 1 } else .{ 1, k_len },
