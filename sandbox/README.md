@@ -3,13 +3,10 @@
 The sandbox is a standalone Zig package that consumes ZGC through its
 public package interface. 
 
-It acts as an example, demonstrating: 
-a complete typed definition,
-definition-driven model generation, 
-source loading, 
-execution, 
-diagnostics, 
-and generated-code inspection without relying on internal backend APIs.
+It contains a 784→128→64→10 digit-classification network and
+demonstrates a complete typed definition, definition-driven model generation,
+external source storage, execution, diagnostics, and generated-code inspection
+without relying on internal backend APIs.
 
 Run commands from this directory unless noted otherwise.
 
@@ -20,8 +17,22 @@ zig build run
 ```
 
 This prints the exact capacities discovered by the counting pass, the concrete
-graph and output tree, the memory plan, memory before and after execution, and
-the final output view.
+graph and output tree, the memory plan, a bounded memory preview before and
+after execution, and the final output view.
+
+The six parameter binaries live in `model_params/`. The
+`model_params` module exposes them through `@embedFile`, and `src/model.zig`
+assigns them with `zgc.Source.embed`. They are read-only data in the executable,
+not members of the model's inline mutable memory. The 784-element input uses
+`zgc.Source.bound` and borrows caller storage at runtime.
+
+The weight files are serialized as `[output, input]`. Three zero-copy
+transpose views adapt them to the graph matmul convention of `[input, output]`;
+the views continue to alias the embedded bytes.
+
+Consequently, the six parameters (437,544 bytes total) and the input receive no
+memory-plan regions. The current unoptimized planner reserves 2,424 bytes only
+for the network's nine intermediate/output tensors.
 
 ## Lean model artifact
 
@@ -63,9 +74,10 @@ consumer:
 
 1. Instantiate `DefinitionBackend` with a source enum and front-end bounds.
 2. Run the typed definition function once.
-3. Finish the definition and call `definition.model()`.
-4. Initialize the generated model, load sources, run, and retrieve an output
-   view.
+3. Finish the definition and call `definition.modelWith(...)` to select bound
+   and embedded source storage.
+4. Initialize the generated model, bind a runtime input, run, and retrieve an
+   output view.
 
 ## Benchmarks
 

@@ -6,7 +6,7 @@ graph, assigned an inline memory plan, and emitted as a specialized Zig type.
 The binary is the model: graph traversal, tensor ranks, shapes, dtypes, layouts,
 and kernel selection are compile-time-known.
 
-The project currently targets Zig 0.16.0 and is under active development.
+The project targets Zig 0.16.0. Its public API is pre-release.
 
 ## Current capabilities
 
@@ -51,16 +51,13 @@ const definition = blk: {
 
 const MyModel = definition.model();
 
-pub fn main() void {
+pub fn main() !void {
     var model = MyModel.init();
 
     const input_values: [4 * 8]f32 = @splat(1);
     const weight_values: [8 * 16]f32 = @splat(0.25);
-    const input_bytes: [@sizeOf(@TypeOf(input_values))]u8 = @bitCast(input_values);
-    const weight_bytes: [@sizeOf(@TypeOf(weight_values))]u8 = @bitCast(weight_values);
-
-    model.Source(Sources.input, &input_bytes);
-    model.Source(Sources.weights, &weight_bytes);
+    try model.copyInput(.input, &input_values);
+    try model.copySource(.weights, &weight_values);
     model.run();
 
     const output = model.outputView(0);
@@ -72,6 +69,42 @@ Definition limits have defaults and may be overridden at compile time. These
 are front-end bounds, not final allocation sizes. The counting pass derives the
 exact node, tensor, reference, output, source, and rank capacities before graph
 construction and memory planning.
+
+## Source storage
+
+Sources use model-owned storage by default. Runtime inputs can be copied into
+that storage with `copyInput`, while owned parameters and constants use the
+typed `copySource` API shown above.
+
+Parameters and constants may instead be embedded directly into the program:
+
+```zig
+const EmbeddedModel = definition.modelWith(.{
+    .weights = zgc.Source.embed(@embedFile("weights.bin")),
+});
+```
+
+The required byte length is derived from the source tensor's compile-time dtype
+and shape and checked during compilation. The current format is raw contiguous,
+native-endian tensor data. Embedded values remain read-only and do not receive
+a region in the model's mutable memory plan.
+
+Inputs can also borrow caller-owned runtime storage without a copy:
+
+```zig
+const BorrowingModel = definition.modelWith(.{
+    .input = zgc.Source.bound,
+    .weights = zgc.Source.embed(@embedFile("weights.bin")),
+});
+
+var model = BorrowingModel.init();
+try model.bindInput(.input, runtime_values);
+model.run();
+```
+
+The bound slice must remain alive and unchanged while `run()` is executing. It
+may be updated or rebound between runs. Unspecified sources use model-owned
+storage, so `definition.model()` is equivalent to an all-owned source plan.
 
 ## Build and test
 
@@ -107,7 +140,7 @@ and the latest local snapshot.
 | `src/zgc/backends/` | Definition, exact counting, graph lowering, and pipeline orchestration |
 | `src/zgc/kernels/` | Elementwise, reduction, contraction, layout, and special kernels |
 | `src/zgc/` | Graph, tensor/view, operation, storage, and executable-model machinery |
-| `src/extensions/` | Older higher-level matrix/network extensions; not the primary graph API |
+| `src/extensions/` | Standalone matrix and feed-forward network utilities exposed through `zgc.Extensions` |
 | `tests/` | Compile-time graph, runtime model, validation, view, and kernel coverage |
 | `benchmarks/` | Maintained operation benchmark harness and results |
 | `sandbox/` | Standalone consumer, diagnostics, and generated-code inspection |
@@ -117,7 +150,7 @@ and the latest local snapshot.
 
 - [Documentation index](docs/README.md)
 - [Architecture and compilation pipeline](docs/architecture.md)
+- [Design constraints](docs/design-constraints.md)
 - [Current development state](docs/development-state.md)
 - [Sandbox and binary inspection](sandbox/README.md)
 - [Benchmarks](benchmarks/README.md)
-- [Upgrade notes](upgrades_notes.md)

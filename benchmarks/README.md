@@ -3,7 +3,7 @@
 This directory is the home for maintained ZGC performance measurements. The
 runnable cases live in `ops/`.
 
-## Current snapshot
+## Reference results
 
 Lower latency is better. Higher throughput is better.
 
@@ -86,14 +86,11 @@ being optimized away.
 | Primitive | ReLU, add, exp | Measured, including strided and broadcast layouts |
 | Primitive | matmul | Measured across four shapes and four 64³ layouts |
 | Primitive | sum and softmax | Measured across contiguous and strided axes |
-| Primitive | sub and remaining layout/elementwise ops | Planned |
-| Fused/operator | dense + activation, attention projections, feed-forward | Planned |
-| End to end | small MLP, transformer block; batch and sequence sweeps | Planned |
-| Resources | workspace, allocations, binary size | Planned |
+| Primitive | sub and remaining layout/elementwise ops | Not covered |
+| Fused/operator | dense + activation, attention projections, feed-forward | Not covered |
+| End to end | small MLP, transformer block; batch and sequence sweeps | Not covered |
+| Resources | workspace, allocations, binary size | Not covered |
 
-New operation cases belong in `benchmarks/ops/`. Add the case to the selection
-in `main.zig`; each case exposes its name, default iteration counts, work unit,
-work and byte counts per invocation, `init`, and `run`.
-
-Do not compare current results directly with the archived zffnn CSV data. The
-implementation, APIs, harness, and measurement semantics all changed.
+Operation cases live in `benchmarks/ops/` and are selected in `main.zig`. Each
+case exposes its name, default iteration counts, work unit, work and byte counts
+per invocation, `init`, and `run`.

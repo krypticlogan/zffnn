@@ -42,7 +42,8 @@ Zig 0.16.0. The API should still be expected to change.
 
 - One inline, aligned memory allocation per model instance.
 - Compile-time memory plan shared by runtime instances.
-- Source loading, sequential graph execution, and typed output views.
+- Typed source/input copying, borrowed runtime inputs, embedded read-only
+  parameters/constants, sequential graph execution, and typed output views.
 - Views alias their root tensor's storage without adding another allocation.
 - Graph structure, memory plan, and bounded raw-memory diagnostics.
 
@@ -60,16 +61,18 @@ Zig 0.16.0. The API should still be expected to change.
 - Shapes and extents are currently compile-time fixed; bounded runtime extents
   are a design goal, not an implemented feature.
 - Memory planning does not yet perform lifetime analysis or reuse regions.
-- `Model.Source` accepts raw bytes and does not yet provide a typed source API
-  with explicit dtype, shape, and byte-length diagnostics.
+- Runtime-bound inputs currently report a missing binding when their view is
+  first resolved during execution rather than through a separate run preflight.
 - There is no graph optimization, fusion, constant folding, or dead-node
   elimination pass yet.
 - Matmul is a direct specialized kernel, not a tuned BLAS replacement.
 - No training, automatic differentiation, dynamic control flow, or device/GPU
   backend exists.
-- Parameter embedding/linking is not integrated into definition compilation.
-- `src/extensions/` contains older matrix/network abstractions and should not be
-  confused with the primary `DefinitionBackend` graph API.
+- External parameter packs and memory-mapped parameter bindings are not yet
+  implemented; parameters can currently be owned or compile-time embedded.
+- `src/extensions/` provides standalone matrix and feed-forward network
+  utilities through `zgc.Extensions`; model graphs use the separate
+  `DefinitionBackend` API.
 - Public naming and module boundaries remain subject to change before a stable
   release.
 
@@ -86,14 +89,3 @@ The test suite currently exercises:
 - ReLU, exp, add, sub, matmul, sum, softmax, and transpose behavior;
 - SIMD tails and strided fallbacks;
 - end-to-end execution across graph-produced aliasing views.
-
-## Near-term work
-
-1. Add typed source loading and stronger source-size diagnostics.
-2. Add tensor lifetime analysis and memory-region reuse.
-3. Introduce graph optimization and fused-operation selection.
-4. Expand dtype policies, especially integer overflow and accumulation rules.
-5. Add more operator, end-to-end model, allocation, workspace, and binary-size
-   benchmarks.
-6. Integrate parameter embedding/linking with compiled definitions.
-7. Continue generated assembly and binary-size inspection through the sandbox.
