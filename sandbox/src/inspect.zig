@@ -10,7 +10,8 @@ comptime {
 
 pub fn main() void {
     var model = sandbox_model.Model.init();
-    sandbox_model.loadInput(&model);
+    const input = sandbox_model.exampleInput();
+    sandbox_model.bindInput(&model, &input);
     zgc_run_model(&model);
     sandbox_model.keepOutputAlive(&model);
 }

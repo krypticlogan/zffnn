@@ -9,6 +9,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const zgc_mod = zgc_dep.module("zgc");
+    const model_params_mod = b.createModule(.{
+        .root_source_file = b.path("model_params/params.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     const exe = b.addExecutable(.{
         .name = "zgc-sandbox",
@@ -18,6 +23,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "zgc", .module = zgc_mod },
+                .{ .name = "model_params", .module = model_params_mod },
             },
         }),
     });
@@ -40,6 +46,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "zgc", .module = zgc_mod },
+                .{ .name = "model_params", .module = model_params_mod },
             },
         }),
     });

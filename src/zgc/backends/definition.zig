@@ -19,10 +19,11 @@ pub fn Value(comptime max_rank: usize) type {
     };
 }
 
-pub fn Definition(comptime limits: Limits) type {
+pub fn Definition(comptime SourceKey: type, comptime limits: Limits) type {
     return struct {
         const Self = @This();
         pub const max_rank = limits.max_rank;
+        pub const Source = SourceKey;
         pub const ValueType = Value(max_rank);
 
         const Node = struct {
@@ -50,7 +51,13 @@ pub fn Definition(comptime limits: Limits) type {
         /// Run capacity counting, graph lowering, memory planning, and model
         /// generation for this completed definition.
         pub fn model(comptime definition: Self) type {
-            return @import("pipeline.zig").model(Self, definition);
+            return @import("pipeline.zig").model(Self, definition, .{});
+        }
+
+        /// Compile this definition with named source-storage overrides. Fields
+        /// use SourceKey tag names and values from `zgc.Source`.
+        pub fn modelWith(comptime definition: Self, comptime sources: anytype) type {
+            return @import("pipeline.zig").model(Self, definition, sources);
         }
     };
 }
@@ -58,7 +65,7 @@ pub fn Definition(comptime limits: Limits) type {
 /// The typed, front-facing model-definition backend.
 pub fn DefinitionBackend(comptime SourceKey: type, comptime limits: Limits) type {
     const source_capacity = enumCapacity(SourceKey);
-    const DefinitionType = Definition(limits);
+    const DefinitionType = Definition(SourceKey, limits);
     const ValueType = DefinitionType.ValueType;
 
     return struct {
@@ -76,12 +83,7 @@ pub fn DefinitionBackend(comptime SourceKey: type, comptime limits: Limits) type
         }
 
         pub fn input(self: *Self, comptime source_key: SourceKey, comptime dtype: Dtype, comptime shape: []const usize) ValueType {
-            return self.addSource(
-                source_key, 
-                .input, 
-                dtype, 
-                shape
-            );
+            return self.addSource(source_key, .input, dtype, shape);
         }
 
         pub fn parameter(

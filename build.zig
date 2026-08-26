@@ -47,6 +47,7 @@ pub fn build(b: *std.Build) void {
 
     test_mod.addImport("zgc", test_root_mod);
     test_mod.addImport("embedding_codegen", embedding_codegen_mod);
+    test_mod.addImport("embed_params", test_embed_params);
 
     const tests = b.addTest(.{
         .root_module = test_mod,

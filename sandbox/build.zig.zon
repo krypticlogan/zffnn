@@ -48,6 +48,7 @@
         "build.zig",
         "build.zig.zon",
         "src",
+        "model_params",
         // For example...
         //"LICENSE",
         //"README.md",

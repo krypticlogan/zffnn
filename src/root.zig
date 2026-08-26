@@ -7,5 +7,6 @@ pub const Validation = @import("zgc/validation.zig");
 pub const DefinitionBackend = @import("zgc/backends/definition.zig").DefinitionBackend;
 pub const DefinitionLimits = @import("zgc/backends/definition.zig").Limits;
 pub const Model = @import("zgc/model.zig").Model;
+pub const Source = @import("zgc/source.zig");
 pub const Storage = @import("zgc/storage.zig");
 pub const Extensions = @import("extensions/ext.zig");

@@ -3,22 +3,37 @@ const Graph = @import("graph.zig");
 const Storage = @import("storage.zig");
 const Tensor = @import("tensor.zig");
 
+fn EmbeddedStorage(comptime bytes: []const u8, comptime alignment: usize) type {
+    const contents = bytes;
+    return struct {
+        const storage: [contents.len]u8 align(alignment) = contents[0..].*;
+    };
+}
+
 pub fn Model(
+    comptime SourceKey: type,
     comptime capacities: Graph.Capacity,
     comptime graph: Graph.Graph(capacities),
+    comptime SourcePlan: type,
 ) type {
-    // generate storage plan
-    const plan = Storage.MemoryPlan(capacities, graph);
+    const plan = Storage.MemoryPlan(capacities, graph, SourcePlan);
     return struct {
         const Self = @This();
+        pub const SourceKeyType = SourceKey;
+        pub const SourceError = error{SourceSizeMismatch};
         pub const build_graph = graph;
         pub const memory_plan = plan;
         pub const internal_capacity = capacities;
+        pub const source_plan = SourcePlan;
 
         memory: [plan.byte_count]u8 align(plan.alignment) = undefined,
+        bound_sources: [capacities.max_sources]?[]const u8 = @splat(null),
 
         pub fn init() Self {
-            return .{ .memory = @splat(0) };
+            return .{
+                .memory = @splat(0),
+                .bound_sources = @splat(null),
+            };
         }
 
         pub fn run(model: *Self) void {
@@ -39,19 +54,62 @@ pub fn Model(
             return model.constTensorView(tensor_id);
         }
 
-        pub fn Source(
+        /// Copy typed values into a model-owned source. This remains available
+        /// for owned parameters/constants as well as inputs.
+        pub fn copySource(
             model: *Self,
-            comptime source_key: anytype,
-            bytes: []const u8,
-        ) void {
-            const source_id: usize = switch (@typeInfo(@TypeOf(source_key))) {
-                .@"enum" => @intFromEnum(source_key),
-                else => @compileError("source keys must be enum values"),
-            };
-            if (source_id >= graph.sources.len) @compileError("The graph does not contain a source with the provided ID");
-            const source = graph.sources[source_id] orelse @compileError("The graph does not contain a source with the provided ID");
-            const source_region = model.tensorBytes(source.tensor);
-            @memcpy(source_region, bytes);
+            comptime source_key: SourceKey,
+            values: []const sourceScalar(source_key),
+        ) SourceError!void {
+            const source_id = comptime sourceIndex(source_key);
+            if (comptime SourcePlan.source_bindings[source_id] != .owned) {
+                @compileError("copySource requires model-owned source storage");
+            }
+            const source = comptime sourceFor(source_key);
+            const bytes = std.mem.sliceAsBytes(values);
+            const expected_bytes = comptime sourceByteCount(source_key);
+            if (bytes.len != expected_bytes) return error.SourceSizeMismatch;
+            @memcpy(model.tensorBytes(source.tensor), bytes);
+        }
+
+        /// Copy one runtime input into its model-owned region.
+        pub fn copyInput(
+            model: *Self,
+            comptime source_key: SourceKey,
+            values: []const sourceScalar(source_key),
+        ) SourceError!void {
+            const source = comptime sourceFor(source_key);
+            comptime requireInput(source);
+            try model.copySource(source_key, values);
+        }
+
+        /// Borrow a typed runtime input slice without copying it. The caller
+        /// must keep the slice alive and unchanged for the duration of run().
+        pub fn bindInput(
+            model: *Self,
+            comptime source_key: SourceKey,
+            values: []const sourceScalar(source_key),
+        ) SourceError!void {
+            const source = comptime sourceFor(source_key);
+            comptime requireInput(source);
+            const source_id = comptime sourceIndex(source_key);
+            if (comptime SourcePlan.source_bindings[source_id] != .bound) {
+                @compileError("bindInput requires the source to be configured as zgc.Source.bound");
+            }
+            const bytes = std.mem.sliceAsBytes(values);
+            const expected_bytes = comptime sourceByteCount(source_key);
+            if (bytes.len != expected_bytes) return error.SourceSizeMismatch;
+            model.bound_sources[source_id] = bytes;
+        }
+
+        pub fn inputIsBound(model: *const Self, comptime source_key: SourceKey) bool {
+            const source = comptime sourceFor(source_key);
+            comptime requireInput(source);
+            const source_id = comptime sourceIndex(source_key);
+            if (comptime SourcePlan.source_bindings[source_id] != .bound) {
+                @compileError("inputIsBound requires a runtime-bound input source");
+            }
+            return model.bound_sources[source_id] != null;
         }
 
         fn executeNode(model: *Self, comptime node_id: Graph.Node.Id) void {
@@ -107,9 +165,7 @@ pub fn Model(
         } {
             const info = graph.tensors[tensor_id].?;
             const T = info.dtype.Scalar();
-            const region = plan.tensor_regions[info.storage_tensor];
-            const bytes = model.memory[region.offset .. region.offset + region.len_bytes];
-            const aligned_bytes: []align(@alignOf(T)) const u8 = @alignCast(bytes);
+            const aligned_bytes = model.constTensorBytes(info.storage_tensor, T);
 
             return .{
                 .storage = std.mem.bytesAsSlice(T, aligned_bytes),
@@ -120,8 +176,66 @@ pub fn Model(
         }
 
         fn tensorBytes(model: *Self, comptime tensor_id: Tensor.Id) []u8 {
-            const region = plan.tensor_regions[tensor_id];
+            const region = plan.tensor_regions[tensor_id] orelse
+                @compileError("tensor does not have model-owned mutable storage");
             return model.memory[region.offset .. region.offset + region.len_bytes];
+        }
+
+        fn constTensorBytes(
+            model: *const Self,
+            comptime tensor_id: Tensor.Id,
+            comptime T: type,
+        ) []align(@alignOf(T)) const u8 {
+            const info = graph.tensors[tensor_id].?;
+            return switch (comptime SourcePlan.bindingForTensor(info)) {
+                .owned => blk: {
+                    const region = plan.tensor_regions[tensor_id].?;
+                    const bytes = model.memory[region.offset .. region.offset + region.len_bytes];
+                    break :blk @alignCast(bytes);
+                },
+                .bound => blk: {
+                    const source_id = switch (info.origin) {
+                        .source => |id| id,
+                        .node => unreachable,
+                    };
+                    const bytes = model.bound_sources[source_id] orelse
+                        @panic("runtime input has not been bound");
+                    break :blk @alignCast(bytes);
+                },
+                .embedded => |bytes| blk: {
+                    const Embedded = EmbeddedStorage(bytes, @alignOf(T));
+                    break :blk &Embedded.storage;
+                },
+            };
+        }
+
+        fn sourceIndex(comptime source_key: SourceKey) usize {
+            const source_id: usize = @intCast(@intFromEnum(source_key));
+            if (source_id >= graph.sources.len or graph.sources[source_id] == null) {
+                @compileError("the graph does not contain the provided source key");
+            }
+            return source_id;
+        }
+
+        fn sourceFor(comptime source_key: SourceKey) Tensor.Source {
+            return graph.sources[sourceIndex(source_key)].?;
+        }
+
+        fn sourceInfo(comptime source_key: SourceKey) @TypeOf(graph).TensorInfo {
+            return graph.tensors[sourceFor(source_key).tensor].?;
+        }
+
+        fn sourceScalar(comptime source_key: SourceKey) type {
+            return sourceInfo(source_key).dtype.Scalar();
+        }
+
+        fn sourceByteCount(comptime source_key: SourceKey) usize {
+            const info = sourceInfo(source_key);
+            return info.shape.elementCount() * info.dtype.byteSize();
+        }
+
+        fn requireInput(comptime source: Tensor.Source) void {
+            if (source.kind != .input) @compileError("source is not a runtime input");
         }
 
         pub fn debugPrintMemory(model: *const Self, comptime byte_limit: usize) void {

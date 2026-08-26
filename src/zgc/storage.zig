@@ -3,26 +3,25 @@ const Tensor = @import("tensor.zig");
 const Graph = @import("graph.zig");
 const Dtype = @import("dtype.zig").Dtype;
 
-pub const StorageRegion = struct { 
-    offset: usize, 
-    len_bytes: usize, 
-    alignment: usize 
+pub const StorageRegion = struct {
+    offset: usize,
+    len_bytes: usize,
+    alignment: usize,
 };
 
-pub const SourceStorage = union(enum) {
-      owned: StorageRegion,
-      embedded: []align(1) const u8,
-      external,
-  };
-  
-pub fn MemoryPlan(comptime capacities: Graph.Capacity, comptime g: Graph.Graph(capacities)) type {
-    var memory_plan: [g.tensor_ct]StorageRegion = undefined;
+pub fn MemoryPlan(
+    comptime capacities: Graph.Capacity,
+    comptime g: Graph.Graph(capacities),
+    comptime SourcePlan: type,
+) type {
+    var memory_plan: [g.tensor_ct]?StorageRegion = @splat(null);
 
     var max_alignment: usize = 1;
     var offset: usize = 0;
     for (0..g.tensor_ct) |tensor_id| {
         const tensor_info = g.tensors[tensor_id].?;
         if (tensor_info.storage_tensor != tensor_id) continue;
+        if (!SourcePlan.isOwned(tensor_info)) continue;
 
         const dtype = tensor_info.dtype;
         const alignment = dtype.alignment();
@@ -53,7 +52,7 @@ pub fn MemoryPlan(comptime capacities: Graph.Capacity, comptime g: Graph.Graph(c
     const storage_alignment = max_alignment;
 
     return struct {
-        pub const tensor_regions: [g.tensor_ct]StorageRegion = regions;
+        pub const tensor_regions: [g.tensor_ct]?StorageRegion = regions;
         pub const byte_count: usize = total_bytes;
         pub const alignment: usize = storage_alignment;
 
@@ -64,8 +63,25 @@ pub fn MemoryPlan(comptime capacities: Graph.Capacity, comptime g: Graph.Graph(c
             );
 
             var previous_end: usize = 0;
-            for (tensor_regions, 0..) |region, tensor_id| {
+            for (tensor_regions, 0..) |maybe_region, tensor_id| {
                 const info = g.tensors[tensor_id].?;
+                const region = maybe_region orelse {
+                    const binding = SourcePlan.bindingForTensor(
+                        g.tensors[info.storage_tensor].?,
+                    );
+                    std.debug.print(
+                        "  t{d}: external storage={s} storage=t{d} dtype={s} shape=",
+                        .{
+                            tensor_id,
+                            @tagName(binding),
+                            info.storage_tensor,
+                            @tagName(info.dtype),
+                        },
+                    );
+                    Tensor.debugPrintShape(&info.shape);
+                    std.debug.print("\n", .{});
+                    continue;
+                };
                 const end = region.offset + region.len_bytes;
                 const owns_storage = info.storage_tensor == tensor_id;
                 const padding = if (owns_storage)
@@ -92,7 +108,3 @@ pub fn MemoryPlan(comptime capacities: Graph.Capacity, comptime g: Graph.Graph(c
         }
     };
 }
-
-// pub fn memoryPlan() MemoryPlan {
-
-// }
