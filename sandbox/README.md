@@ -10,6 +10,17 @@ without relying on internal backend APIs.
 
 Run commands from this directory unless noted otherwise.
 
+## Interactive demo
+
+```sh
+zig build demo -Doptimize=ReleaseFast
+```
+
+The `demo` executable opens a 28×28 drawing canvas backed directly by the
+model's runtime-bound input. Hold the left mouse button to draw a digit; the
+dashboard updates all ten class probabilities as the canvas changes. Press
+Enter to clear the canvas. The model parameters remain embedded read-only data.
+
 ## Diagnostic model run
 
 ```sh

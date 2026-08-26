@@ -14,6 +14,12 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const raylib_dep = b.dependency("raylib_zig", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const raylib_mod = raylib_dep.module("raylib");
+    const raylib_artifact = raylib_dep.artifact("raylib");
 
     const exe = b.addExecutable(.{
         .name = "zgc-sandbox",
@@ -31,12 +37,32 @@ pub fn build(b: *std.Build) void {
 
     const run_step = b.step("run", "Build and run the zgc sandbox");
     const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
     run_step.dependOn(&run_cmd.step);
 
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
+
+    const demo_exe = b.addExecutable(.{
+        .name = "demo",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/demo.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "zgc", .module = zgc_mod },
+                .{ .name = "model_params", .module = model_params_mod },
+                .{ .name = "raylib", .module = raylib_mod },
+            },
+            .link_libc = true,
+        }),
+    });
+    demo_exe.root_module.linkLibrary(raylib_artifact);
+    b.installArtifact(demo_exe);
+
+    const demo_step = b.step("demo", "Run the interactive digit-classification demo");
+    const demo_cmd = b.addRunArtifact(demo_exe);
+    demo_step.dependOn(&demo_cmd.step);
 
     const inspect_exe = b.addExecutable(.{
         .name = "zgc-model",
