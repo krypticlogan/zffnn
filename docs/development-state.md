@@ -4,6 +4,14 @@ ZGC is functional but pre-release. The compile-time definition-to-model path,
 runtime execution, tests, sandbox, and operation benchmark suite are working on
 Zig 0.16.0. The API should still be expected to change.
 
+## Need to implement
+1. reshape / permute / slice
+2. mul / div
+3. max / mean reductions
+4. batched matmul
+5. concatenate
+6. convolution
+
 ## Implemented
 
 ### Definition and compilation
@@ -45,15 +53,17 @@ Zig 0.16.0. The API should still be expected to change.
 - Typed source/input copying, borrowed runtime inputs, embedded read-only
   parameters/constants, sequential graph execution, and typed output views.
 - Views alias their root tensor's storage without adding another allocation.
-- Graph structure, memory plan, and bounded raw-memory diagnostics.
+- Writer-based capacity, graph, tree, memory-plan, and bounded model-memory
+  inspection through `zgc.Inspect`.
 
 ### Tooling
 
 - Unit and end-to-end tests through `zig build test`.
 - Compile-only check through `zig build check`.
 - Maintained root benchmark suite with shape and layout comparisons.
-- Standalone sandbox for public-package consumption and generated-code
-  inspection.
+- Reusable model-specific inspection CLI and generated-model runner modules.
+- Standalone sandbox consumer with an interactive model application and model
+  artifact tooling.
 - Embedding generator executable remains part of the root build.
 
 ## Important limitations

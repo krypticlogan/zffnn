@@ -1,7 +1,7 @@
 # Benchmarks
 
-This directory is the home for maintained ZGC performance measurements. The
-runnable cases live in `ops/`.
+This directory contains ZGC performance measurements. The runnable cases live
+in `ops/`.
 
 ## Reference results
 
@@ -40,9 +40,8 @@ Lower latency is better. Higher throughput is better.
 | softmax axis, strided 256×256 | 1.317 ms | 49.78 Melem/s | 0.70× |
 
 Recorded 2026-08-10 with Zig 0.16.0, `ReleaseFast`, x86_64 Darwin 24.6. These
-are local development snapshots, not cross-machine comparisons. Each value is
-the average of 10 timed runs using the case-specific defaults. ReLU was rerun
-in isolation because its first full-suite sample was disturbed by system noise.
+are local measurements, not cross-machine comparisons. Each value is the
+average of 10 timed runs using the case-specific defaults.
 
 ## Run
 

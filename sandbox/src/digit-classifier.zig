@@ -1,4 +1,3 @@
-const std = @import("std");
 const zgc = @import("zgc");
 const params = @import("model_params");
 
@@ -63,18 +62,7 @@ pub const Model = definition.modelWith(.{
     .w3 = zgc.Source.embed(params.w3),
     .b3 = zgc.Source.embed(params.b3),
 });
-pub const capacity = Model.internal_capacity;
-pub const graph = Model.build_graph;
-
-/// Stable placeholder data for the CLI and disassembly examples.
-pub fn exampleInput() [input_size]f32 {
-    return @splat(0);
-}
 
 pub fn bindInput(model: *Model, input: *const [input_size]f32) void {
     model.bindInput(.input, input) catch unreachable;
-}
-
-pub fn keepOutputAlive(model: *const Model) void {
-    std.mem.doNotOptimizeAway(model.outputView(0).storage);
 }

@@ -1,5 +1,4 @@
 const std = @import("std");
-const Tensor = @import("tensor.zig");
 const Graph = @import("graph.zig");
 const Dtype = @import("dtype.zig").Dtype;
 
@@ -55,56 +54,5 @@ pub fn MemoryPlan(
         pub const tensor_regions: [g.tensor_ct]?StorageRegion = regions;
         pub const byte_count: usize = total_bytes;
         pub const alignment: usize = storage_alignment;
-
-        pub fn debugPrint() void {
-            std.debug.print(
-                "MemoryPlan(bytes={d}, alignment={d}, tensors={d})\n",
-                .{ byte_count, alignment, tensor_regions.len },
-            );
-
-            var previous_end: usize = 0;
-            for (tensor_regions, 0..) |maybe_region, tensor_id| {
-                const info = g.tensors[tensor_id].?;
-                const region = maybe_region orelse {
-                    const binding = SourcePlan.bindingForTensor(
-                        g.tensors[info.storage_tensor].?,
-                    );
-                    std.debug.print(
-                        "  t{d}: external storage={s} storage=t{d} dtype={s} shape=",
-                        .{
-                            tensor_id,
-                            @tagName(binding),
-                            info.storage_tensor,
-                            @tagName(info.dtype),
-                        },
-                    );
-                    Tensor.debugPrintShape(&info.shape);
-                    std.debug.print("\n", .{});
-                    continue;
-                };
-                const end = region.offset + region.len_bytes;
-                const owns_storage = info.storage_tensor == tensor_id;
-                const padding = if (owns_storage)
-                    region.offset - previous_end
-                else
-                    0;
-                std.debug.print(
-                    "  t{d}: [{d}..{d}) bytes={d} align={d} padding={d} storage=t{d} dtype={s} shape=",
-                    .{
-                        tensor_id,
-                        region.offset,
-                        end,
-                        region.len_bytes,
-                        region.alignment,
-                        padding,
-                        info.storage_tensor,
-                        @tagName(info.dtype),
-                    },
-                );
-                Tensor.debugPrintShape(&info.shape);
-                std.debug.print("\n", .{});
-                if (owns_storage) previous_end = end;
-            }
-        }
     };
 }

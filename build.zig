@@ -19,6 +19,17 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    _ = b.addModule("zgc_inspect_cli", .{
+        .root_source_file = b.path("src/cli/inspect.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "zgc", .module = zgc_mod }},
+    });
+    _ = b.addModule("zgc_model_runner", .{
+        .root_source_file = b.path("src/artifact/model_runner.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     // tests
     const test_embed_params = b.createModule(.{
@@ -53,12 +64,35 @@ pub fn build(b: *std.Build) void {
         .root_module = test_mod,
     });
 
+    const runner_test_model = b.createModule(.{
+        .root_source_file = b.path("tests/fixtures/runner_model.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "zgc", .module = zgc_mod }},
+    });
+    const runner_test_module = b.createModule(.{
+        .root_source_file = b.path("src/artifact/model_runner.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{.{ .name = "model", .module = runner_test_model }},
+    });
+    const runner_test_exe = b.addExecutable(.{
+        .name = "zgc-model-runner-test",
+        .root_module = runner_test_module,
+    });
+    runner_test_exe.forceUndefinedSymbol(if (target.result.os.tag == .macos)
+        "_zgc_run_model"
+    else
+        "zgc_run_model");
+
     const check_step = b.step("check", "Compile tests without running them");
     check_step.dependOn(&tests.step);
+    check_step.dependOn(&runner_test_exe.step);
 
     const run_mod_tests = b.addRunArtifact(tests);
     const test_step = b.step("test", "Run tests");
     test_step.dependOn(&run_mod_tests.step);
+    test_step.dependOn(&runner_test_exe.step);
 
     // benchmarks
     const benchmark_op = b.option([]const u8, "op", "Tensor operation to benchmark") orelse "all";

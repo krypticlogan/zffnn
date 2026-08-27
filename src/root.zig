@@ -9,4 +9,5 @@ pub const DefinitionLimits = @import("zgc/backends/definition.zig").Limits;
 pub const Model = @import("zgc/model.zig").Model;
 pub const Source = @import("zgc/source.zig");
 pub const Storage = @import("zgc/storage.zig");
+pub const Inspect = @import("zgc/inspect.zig");
 pub const Extensions = @import("extensions/ext.zig");

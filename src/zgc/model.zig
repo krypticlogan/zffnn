@@ -237,30 +237,5 @@ pub fn Model(
         fn requireInput(comptime source: Tensor.Source) void {
             if (source.kind != .input) @compileError("source is not a runtime input");
         }
-
-        pub fn debugPrintMemory(model: *const Self, comptime byte_limit: usize) void {
-            const displayed_bytes = @min(byte_limit, plan.byte_count);
-            std.debug.print(
-                "ModelMemory(bytes={d}, alignment={d}, showing={d})\n",
-                .{ plan.byte_count, plan.alignment, displayed_bytes },
-            );
-
-            for (model.memory[0..displayed_bytes], 0..) |byte, offset| {
-                if (offset % 16 == 0) {
-                    std.debug.print("  {x:0>6}: ", .{offset});
-                }
-                std.debug.print("{x:0>2} ", .{byte});
-                if (offset % 16 == 15 or offset + 1 == displayed_bytes) {
-                    std.debug.print("\n", .{});
-                }
-            }
-
-            if (displayed_bytes < plan.byte_count) {
-                std.debug.print(
-                    "  ... {d} bytes omitted\n",
-                    .{plan.byte_count - displayed_bytes},
-                );
-            }
-        }
     };
 }

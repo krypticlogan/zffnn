@@ -416,28 +416,7 @@ pub fn Info(comptime max_rank: usize) type {
         storage_tensor: Id,
 
         origin: Origin,
-
-        pub fn debugPrint(info: @This(), id: Id) void {
-            std.debug.print("  t{d}: {s} shape=", .{ id, @tagName(info.dtype) });
-            debugPrintShape(&info.shape);
-            switch (info.origin) {
-                .node => |node| std.debug.print(" producer=n{d}\n", .{node}),
-                .source => |source| std.debug.print(
-                    " source={d}\n",
-                    .{source},
-                ),
-            }
-        }
     };
 }
 
 pub const Ref = struct { id: Id };
-
-pub fn debugPrintShape(shape: anytype) void {
-    std.debug.print("[", .{});
-    for (shape.slice(), 0..) |extent, axis| {
-        if (axis != 0) std.debug.print(", ", .{});
-        std.debug.print("{d}", .{extent});
-    }
-    std.debug.print("]", .{});
-}

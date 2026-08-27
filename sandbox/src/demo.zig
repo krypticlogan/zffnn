@@ -1,6 +1,6 @@
 const std = @import("std");
 const rl = @import("raylib");
-const sandbox_model = @import("model.zig");
+const sandbox_model = @import("digit-classifier.zig");
 
 const screen_width = 1000;
 const screen_height = 600;

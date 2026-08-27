@@ -75,39 +75,12 @@ pub const Op = union(enum) {
                 },
             };
         }
-
-        pub fn debugPrint(op: Compute) void {
-            switch (op) {
-                .relu => std.debug.print("relu", .{}),
-                .exp => std.debug.print("exp", .{}),
-                .add => std.debug.print("add", .{}),
-                .sub => std.debug.print("sub", .{}),
-                .matmul => std.debug.print("matmul", .{}),
-                .sum => |attrs| {
-                    std.debug.print("sum(axis={d})", .{attrs.axis});
-                },
-                .softmax => |attrs| {
-                    std.debug.print("softmax(axis={d})", .{attrs.axis});
-                },
-            }
-        }
     };
 
     pub const View = union(enum) {
         transpose: TransposeAttrs,
 
         pub const TransposeAttrs = struct { axis_a: i8, axis_b: i8 };
-
-        pub fn debugPrint(op: View) void {
-            switch (op) {
-                .transpose => |attrs| {
-                    std.debug.print(
-                        "transpose(axes={d},{d})",
-                        .{ attrs.axis_a, attrs.axis_b },
-                    );
-                },
-            }
-        }
     };
 
     pub fn kind(op: Op) Kind {
@@ -121,13 +94,6 @@ pub const Op = union(enum) {
         switch (op) {
             .compute => |compute| compute.execute(inputs, output),
             .view => @compileError("view operations do not execute a runtime kernel"),
-        }
-    }
-
-    pub fn debugPrint(op: Op) void {
-        switch (op) {
-            .compute => |compute| compute.debugPrint(),
-            .view => |view| view.debugPrint(),
         }
     }
 };

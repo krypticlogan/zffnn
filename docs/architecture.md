@@ -48,7 +48,7 @@ The definition records:
 Shape and dtype validation occurs while operations are added. `finish()` returns
 the completed immutable definition value.
 
-Definition limits currently cover maximum rank, nodes, tensors, input
+Definition limits cover maximum rank, nodes, tensors, input
 references, and outputs. Defaults support small models; larger definitions can
 override individual fields. Exceeding a bound is a compile error.
 
@@ -61,7 +61,7 @@ direct enum indexing, so its capacity is the highest referenced source index
 plus one.
 
 The graph backend then lowers tensors in definition order. Compute results own
-contiguous storage. View operations, currently transpose, preserve their source
+contiguous storage. Transpose view operations preserve their source
 storage tensor and produce an aliasing layout with adjusted shape and strides.
 
 The concrete graph stores fixed arrays of nodes, tensor metadata, flattened
@@ -75,19 +75,28 @@ contains one inline byte array sized and aligned by that plan. Model-owned
 sources and compute results receive regions in this array; embedded parameters,
 embedded constants, and runtime-bound inputs remain external to it.
 
-The current planner does not reuse regions when tensor lifetimes do not overlap,
-so independent compute results receive distinct storage. Execution itself does
-not allocate.
+The planner assigns distinct storage to independent compute results and does
+not reuse regions when tensor lifetimes do not overlap. Execution does not
+allocate.
 
-The model API currently provides:
+The model API provides:
 
 - `init()` to zero-initialize model memory;
 - `copyInput(key, values)` to copy a typed runtime input into owned storage;
 - `copySource(key, values)` to initialize any model-owned source;
 - `bindInput(key, values)` to borrow a typed runtime input without copying;
 - `run()` to execute compute nodes in graph order;
-- `outputView(index)` to retrieve a typed read-only view;
-- `debugPrintMemory(limit)` plus compile-time graph and memory-plan metadata.
+- `outputView(index)` to retrieve a typed read-only view.
+
+`zgc.Inspect` consumes the model's compile-time graph and memory-plan metadata
+without adding rendering responsibilities to the model, graph, operation,
+tensor, or storage types. It also renders bounded mutable memory from a model
+instance when requested.
+
+`zgc_model_runner` specializes a minimal executable around a consumer-provided
+model module. The generated artifact exports a stable execution symbol and
+model layout metadata while leaving initialization, runtime source binding, and
+output handling to the application.
 
 View nodes do not execute kernels. Their result layouts are resolved during
 graph construction, and downstream compute kernels receive views into the

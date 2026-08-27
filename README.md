@@ -1,14 +1,14 @@
 # Zig Graph Compiler
 
-ZGC is an early-stage, allocation-free inference graph compiler for Zig. A
-model architecture is defined at compile time, lowered to a fixed execution
-graph, assigned an inline memory plan, and emitted as a specialized Zig type.
+ZGC is an allocation-free inference graph compiler for Zig. A model
+architecture is defined at compile time, lowered to a fixed execution graph,
+assigned an inline memory plan, and emitted as a specialized Zig type.
 The binary is the model: graph traversal, tensor ranks, shapes, dtypes, layouts,
 and kernel selection are compile-time-known.
 
-The project targets Zig 0.16.0. Its public API is pre-release.
+The project targets Zig 0.16.0.
 
-## Current capabilities
+## Capabilities
 
 - Typed, front-facing `DefinitionBackend` with enum-indexed sources.
 - Automatic counting and graph-lowering passes through `definition.model()`.
@@ -19,7 +19,7 @@ The project targets Zig 0.16.0. Its public API is pre-release.
 - `f32`, `f16`, and `i8` tensor metadata and elementwise kernels where valid.
 - ReLU, exp, add, sub, matmul, sum, softmax, and transpose operations.
 - SIMD fast paths for contiguous kernels and generic strided traversal.
-- Operation benchmarks and an external-consumer-style sandbox.
+- Operation benchmarks and a standalone sandbox package.
 
 See [development state](docs/development-state.md) for precise limitations and
 [architecture](docs/architecture.md) for the compilation pipeline.
@@ -85,7 +85,7 @@ const EmbeddedModel = definition.modelWith(.{
 ```
 
 The required byte length is derived from the source tensor's compile-time dtype
-and shape and checked during compilation. The current format is raw contiguous,
+and shape and checked during compilation. The format is raw contiguous,
 native-endian tensor data. Embedded values remain read-only and do not receive
 a region in the model's mutable memory plan.
 
@@ -118,7 +118,7 @@ how a separate Zig package consumes it through `b.dependency("zgc", ...)`.
 
 ## Benchmarks
 
-Run the complete maintained suite in `ReleaseFast`:
+Run the complete suite in `ReleaseFast`:
 
 ```sh
 zig build benchmark -Doptimize=ReleaseFast
@@ -131,7 +131,7 @@ zig build benchmark -Dop=matmul-rhs-strided -Doptimize=ReleaseFast
 ```
 
 See the [benchmark dashboard](benchmarks/README.md) for selectors, methodology,
-and the latest local snapshot.
+and recorded results.
 
 ## Repository layout
 
@@ -140,17 +140,21 @@ and the latest local snapshot.
 | `src/zgc/backends/` | Definition, exact counting, graph lowering, and pipeline orchestration |
 | `src/zgc/kernels/` | Elementwise, reduction, contraction, layout, and special kernels |
 | `src/zgc/` | Graph, tensor/view, operation, storage, and executable-model machinery |
+| `src/cli/` | Model-specific command-line entry points |
+| `src/artifact/` | Generated-model artifact entry points |
 | `src/extensions/` | Standalone matrix and feed-forward network utilities exposed through `zgc.Extensions` |
 | `tests/` | Compile-time graph, runtime model, validation, view, and kernel coverage |
-| `benchmarks/` | Maintained operation benchmark harness and results |
-| `sandbox/` | Standalone consumer, diagnostics, and generated-code inspection |
-| `docs/` | Architecture and current development status |
+| `benchmarks/` | Operation benchmark harness and recorded results |
+| `sandbox/` | Standalone model definitions, interactive inference, inspection, and artifact analysis |
+| `docs/` | Architecture, design constraints, capabilities, and limitations |
 
 ## Documentation
 
 - [Documentation index](docs/README.md)
 - [Architecture and compilation pipeline](docs/architecture.md)
 - [Design constraints](docs/design-constraints.md)
+- [Model inspection](docs/inspection.md)
+- [Generated model artifacts](docs/model-artifacts.md)
 - [Current development state](docs/development-state.md)
 - [Sandbox and binary inspection](sandbox/README.md)
 - [Benchmarks](benchmarks/README.md)

@@ -7,6 +7,7 @@ test {
     _ = @import("meta.zig");
     _ = @import("definition.zig");
     _ = @import("model.zig");
+    _ = @import("inspect.zig");
     _ = @import("tensor_view.zig");
     _ = @import("tensor_ops/tests.zig");
     _ = @import("validation.zig");

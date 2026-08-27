@@ -7,9 +7,14 @@ runtime storage, supported operations, constraints, and tooling.
   memory planning, and generated model execution.
 - [Design constraints](design-constraints.md) — compile-time specialization,
   source ownership, execution, and memory invariants.
+- [Model inspection](inspection.md) — writer-based representations and the
+  model-specific inspection CLI.
+- [Generated model artifacts](model-artifacts.md) — minimal model executables
+  and their stable exported symbols.
 - [Development state](development-state.md) — implemented capabilities,
   limitations, and tests.
 - [Repository README](../README.md) — public API example and common commands.
-- [Sandbox](../sandbox/README.md) — diagnostics and generated-code inspection.
-- [Benchmarks](../benchmarks/README.md) — cases, methodology, and current local
+- [Sandbox](../sandbox/README.md) — model consumption, interactive inference,
+  inspection, and generated-code analysis.
+- [Benchmarks](../benchmarks/README.md) — cases, methodology, and recorded
   results.
