@@ -4,8 +4,8 @@ The sandbox is a standalone Zig package that consumes ZGC through its
 public package interface. 
 
 It contains a 784→128→64→10 digit-classification network for interactive
-inference and a small 1×8 ReLU model for model inspection and generated-artifact
-analysis. Both use the public package interface rather than internal backends.
+inference, inspection, and generated-artifact analysis, plus a small 1×8 ReLU
+model definition. Both use the public package interface.
 
 Run commands from this directory unless noted otherwise.
 
@@ -41,9 +41,9 @@ zig build inspect
 ```
 
 The model-specific `zgc-inspect` executable uses the library inspection CLI and
-the `Model` exported from `src/relu-model.zig`. With no argument it prints the exact
-capacity, tensor and operation listing, output-oriented graph tree, and memory
-plan. Individual representations can be selected after `--`:
+the `Model` exported from `src/digit-classifier.zig`. With no argument it prints
+the exact capacity, tensor and operation listing, output-oriented graph tree,
+and memory plan. Individual representations can be selected after `--`:
 
 ```sh
 zig build inspect -- summary
@@ -64,11 +64,11 @@ zig build build-model -Doptimize=ReleaseFast
 ```
 
 The resulting artifact is `zig-out/bin/zgc-model`. It uses ZGC's
-`zgc_model_runner` module and the `Model` exported from `src/relu-model.zig`. Its
-exported `zgc_run_model` symbol contains model execution without logging,
-timing, input generation, or output formatting. The executable entry point is
-intentionally inert because runtime input binding belongs to an application
-harness.
+`zgc_model_runner` module and the `Model` exported from
+`src/digit-classifier.zig`. Its exported `zgc_run_model` symbol contains model
+execution without logging, timing, input generation, or output formatting. The
+executable entry point performs no inference because runtime input binding
+belongs to the host application.
 
 Disassemble only the stable execution symbol:
 

@@ -47,6 +47,7 @@ harness initializes the model and supplies its inputs before calling the
 execution function. The stable symbols support model-code isolation, size
 analysis, linkage, and disassembly.
 
-Parameters configured with `zgc.Source.embed` remain read-only program data in
-the artifact. Bound inputs remain external, and neither consumes mutable model
-memory.
+Parameters configured with `zgc.Source.embed` are compile-time packed from
+logical row-major bytes into the selected physical layout and remain read-only
+program data in the artifact. `zgc.Source.embedPacked` accepts already-packed
+bytes. Bound inputs remain external, and neither consumes mutable model memory.

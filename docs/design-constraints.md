@@ -20,11 +20,15 @@ construction and execution flow.
 Every graph source has one storage policy selected by `definition.modelWith`:
 
 - Owned sources receive an aligned region in model memory and are populated
-  through `copyInput` or `copySource`.
+  through `copyInput` or `copySource`. Values use logical row-major order and
+  are packed into the compiled physical layout.
 - Bound inputs borrow a caller-owned slice through `bindInput`. The slice must
-  remain valid and unchanged for the duration of `run()`.
-- Embedded parameters and constants use read-only program data supplied through
-  `Source.embed`, commonly with `@embedFile`.
+  use the layout reported by `sourceLayout`, and remain valid and unchanged for
+  the duration of `run()`.
+- Embedded parameters and constants use read-only program data.
+  `Source.embed`, commonly used with `@embedFile`, accepts logical row-major
+  bytes and compile-time packs them into the selected layout;
+  `Source.embedPacked` accepts bytes already in that physical layout.
 
 Unspecified policies are owned. Bound and embedded sources do not consume space
 in the model's mutable memory plan.
@@ -37,6 +41,13 @@ in the model's mutable memory plan.
   copying tensor data.
 - Views preserve shape, offset, and stride metadata and continue to reference
   the root tensor's storage.
+- Lowering may choose a first-axis-contiguous physical layout for eligible
+  rank-2 matmuls and propagate it through compatible dense operations.
+- Matmul parameter and constant right-hand sides retain logical `[K, N]` shape
+  while lowering may store them output-major with physical strides `[1, K]`.
+- Generated matmuls carry a compile-time traversal plan selected from concrete
+  graph layouts. Runtime layout dispatch is reserved for direct low-level
+  operation calls that use the `automatic` strategy.
 - `run()` executes the fixed operation list sequentially. Runtime input values
   may change between runs without rebuilding the model type.
 

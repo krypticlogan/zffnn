@@ -8,9 +8,8 @@ Zig 0.16.0. The API should still be expected to change.
 1. reshape / permute / slice
 2. mul / div
 3. max / mean reductions
-4. batched matmul
-5. concatenate
-6. convolution
+4. concatenate
+5. convolution
 
 ## Implemented
 
@@ -38,10 +37,10 @@ Zig 0.16.0. The API should still be expected to change.
 
 | Operation | Current support |
 | --- | --- |
-| ReLU | Contiguous SIMD and generic strided traversal; float and signed integer |
-| Exp | Floating-point tensors; contiguous SIMD and strided traversal |
-| Add/sub | Matching dtypes, NumPy-style trailing-axis broadcasting, strided traversal |
-| Matmul | Rank-2 tensors with contiguous and strided inputs/outputs |
+| ReLU | SIMD over matching dense layouts and generic strided traversal; float and signed integer |
+| Exp | Floating-point tensors; SIMD over matching dense layouts and strided traversal |
+| Add/sub | Matching dtypes, NumPy-style trailing-axis broadcasting, dense-layout and batch-broadcast SIMD paths, strided traversal |
+| Matmul | Rank-2 tensors with contiguous and strided inputs/outputs; packed right-hand parameters and compile-time-selected native-width SIMD traversal |
 | Sum | Single-axis reduction, including strided axes and rank-zero results |
 | Softmax | Stable single-axis floating-point implementation, including strided axes |
 | Transpose | Aliasing graph view; no runtime copy or kernel |
@@ -50,8 +49,9 @@ Zig 0.16.0. The API should still be expected to change.
 
 - One inline, aligned memory allocation per model instance.
 - Compile-time memory plan shared by runtime instances.
-- Typed source/input copying, borrowed runtime inputs, embedded read-only
-  parameters/constants, sequential graph execution, and typed output views.
+- Typed logical source/input packing, borrowed runtime inputs, logical or
+  prepacked embedded read-only parameters/constants, sequential graph
+  execution, and typed output views.
 - Views alias their root tensor's storage without adding another allocation.
 - Writer-based capacity, graph, tree, memory-plan, and bounded model-memory
   inspection through `zgc.Inspect`.
@@ -73,8 +73,12 @@ Zig 0.16.0. The API should still be expected to change.
 - Memory planning does not yet perform lifetime analysis or reuse regions.
 - Runtime-bound inputs currently report a missing binding when their view is
   first resolved during execution rather than through a separate run preflight.
-- There is no graph optimization, fusion, constant folding, or dead-node
-  elimination pass yet.
+- Layout selection is limited to packed matmul right-hand parameters, the
+  matmul batch heuristic, and compatible result propagation. There is no
+  fusion, constant folding, dead-node elimination, or general cost-based graph
+  optimization pass yet.
+- Softmax and reductions traverse propagated layouts correctly, but do not yet
+  have a dedicated batch-oriented lowering and kernel strategy for every axis.
 - Matmul is a direct specialized kernel, not a tuned BLAS replacement.
 - No training, automatic differentiation, dynamic control flow, or device/GPU
   backend exists.

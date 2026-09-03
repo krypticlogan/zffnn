@@ -16,7 +16,7 @@ DefinitionBackend ──► completed definition
                             │
                             ▼
                        GraphBackend
-                     concrete graph
+                 concrete graph and layouts
                             │
                             ▼
                        MemoryPlan
@@ -61,8 +61,14 @@ direct enum indexing, so its capacity is the highest referenced source index
 plus one.
 
 The graph backend then lowers tensors in definition order. Compute results own
-contiguous storage. Transpose view operations preserve their source
-storage tensor and produce an aliasing layout with adjusted shape and strides.
+dense storage. A rank-2 matmul keeps the public logical contract
+`[M, K] * [K, N]`. Parameter and constant right-hand sides are packed with
+physical strides `[1, K]`, making each logical output column contiguous.
+Matmuls whose leading dimension can fill a target SIMD vector also select a
+first-axis-contiguous lhs and result layout; that result layout propagates
+through compatible add, ReLU, exp, and softmax results. Other compute results
+use row-major storage. Transpose view operations preserve their source storage
+tensor and produce an aliasing layout with adjusted shape and strides.
 
 The concrete graph stores fixed arrays of nodes, tensor metadata, flattened
 input references, outputs, and sources. Node order is execution order.
@@ -82,9 +88,10 @@ allocate.
 The model API provides:
 
 - `init()` to zero-initialize model memory;
-- `copyInput(key, values)` to copy a typed runtime input into owned storage;
-- `copySource(key, values)` to initialize any model-owned source;
-- `bindInput(key, values)` to borrow a typed runtime input without copying;
+- `copyInput(key, values)` to pack a logical row-major runtime input into owned storage;
+- `copySource(key, values)` to pack logical row-major values into any model-owned source;
+- `bindInput(key, values)` to borrow input already stored in the compiled physical layout;
+- `sourceLayout(key)` to query that source layout;
 - `run()` to execute compute nodes in graph order;
 - `outputView(index)` to retrieve a typed read-only view.
 
@@ -103,15 +110,28 @@ graph construction, and downstream compute kernels receive views into the
 aliased storage.
 
 `definition.modelWith(...)` selects non-default storage by source-enum tag.
-`zgc.Source.embed(bytes)` places a parameter or constant in read-only program
-data, while `zgc.Source.bound` makes an input borrow storage supplied to each
-model instance. Dtype is enforced by the typed copy/bind APIs, and element or
-byte counts are checked before a source is accepted.
+`zgc.Source.embed(bytes)` accepts logical row-major parameter or constant bytes
+and compile-time packs them into the lowered source layout.
+`zgc.Source.embedPacked(bytes)` accepts bytes already in that physical layout.
+Both place the resulting storage in read-only program data.
+`zgc.Source.bound` makes an input borrow storage supplied to each model
+instance. Dtype is enforced by the typed copy/bind APIs, and element or byte
+counts are checked before a source is accepted.
 
 ## Kernel dispatch
 
 Each compute node resolves typed input and output views and dispatches through
-`Op.Compute.execute`. Kernels are grouped by family:
+`Op.Compute.execute`. Graph lowering selects physical layouts, while kernels
+traverse contiguous axes in target-native SIMD chunks with scalar tails.
+
+Matmul lowering also records a concrete traversal strategy in the operation's
+compile-time plan. Generated models dispatch directly to that strategy and do
+not branch over layout metadata at runtime. Direct low-level operation calls
+retain an `automatic` strategy for views whose layouts are only known at
+runtime. The plan contains the traversal strategy and is the configuration
+boundary for strategy-specific kernels.
+
+Kernels are grouped by family:
 
 | Family | Implemented operations |
 | --- | --- |
@@ -121,6 +141,9 @@ Each compute node resolves typed input and output views and dispatches through
 | Special | Softmax over one axis |
 | Layout | Compile-time transpose inference |
 
-Contiguous elementwise and selected reduction/contraction paths use SIMD.
-Generic view traversal handles offsets and positive or negative strides where
-the relevant kernel supports them.
+Elementwise kernels use SIMD for row-major tensors and matching dense axis
+permutations. Trailing-vector add/sub also vectorizes across a contiguous first
+axis, covering bias operations on batch-oriented matmul results. Selected
+reduction and contraction paths use SIMD. Generic view traversal handles
+offsets and positive or negative strides where the relevant kernel supports
+them.

@@ -19,16 +19,16 @@ The project targets Zig 0.16.0.
 - `f32`, `f16`, and `i8` tensor metadata and elementwise kernels where valid.
 - ReLU, exp, add, sub, matmul, sum, softmax, and transpose operations.
 - SIMD fast paths for contiguous kernels and generic strided traversal.
-- Operation benchmarks and a standalone sandbox package.
+- Operation and generated-model benchmarks, plus a standalone sandbox package.
 
 See [development state](docs/development-state.md) for precise limitations and
 [architecture](docs/architecture.md) for the compilation pipeline.
 
 ## Defining a model
 
-`DefinitionBackend` is the only public model-building backend. Source keys and
-tensor values are concrete types; user code does not run separately against
-counting and graph builders.
+`DefinitionBackend` is the model-building surface. Source keys and tensor
+values are concrete types; user code does not run separately against counting
+and graph builders.
 
 ```zig
 const std = @import("std");
@@ -85,9 +85,11 @@ const EmbeddedModel = definition.modelWith(.{
 ```
 
 The required byte length is derived from the source tensor's compile-time dtype
-and shape and checked during compilation. The format is raw contiguous,
-native-endian tensor data. Embedded values remain read-only and do not receive
-a region in the model's mutable memory plan.
+and shape and checked during compilation. `Source.embed` accepts raw logical
+row-major, native-endian tensor data and packs it at compile time when lowering
+selects another physical layout. `Source.embedPacked` accepts bytes already in
+the layout reported by `Model.sourceLayout`. Embedded values remain read-only
+and do not receive a region in the model's mutable memory plan.
 
 Inputs can also borrow caller-owned runtime storage without a copy:
 
@@ -102,9 +104,16 @@ try model.bindInput(.input, runtime_values);
 model.run();
 ```
 
-The bound slice must remain alive and unchanged while `run()` is executing. It
-may be updated or rebound between runs. Unspecified sources use model-owned
-storage, so `definition.model()` is equivalent to an all-owned source plan.
+The bound slice must:
+
+- use the physical order reported by `BorrowingModel.sourceLayout(.input)`
+- remain alive and unchanged while `run()` is executing.
+
+It may be updated or rebound between runs. `copyInput` accepts logical
+row-major values and packs them when lowering selects another layout.
+
+Unspecified sources use model-owned storage, so `definition.model()` is
+equivalent to an all-owned source plan.
 
 ## Build and test
 
@@ -144,7 +153,7 @@ and recorded results.
 | `src/artifact/` | Generated-model artifact entry points |
 | `src/extensions/` | Standalone matrix and feed-forward network utilities exposed through `zgc.Extensions` |
 | `tests/` | Compile-time graph, runtime model, validation, view, and kernel coverage |
-| `benchmarks/` | Operation benchmark harness and recorded results |
+| `benchmarks/` | Operation and generated-model benchmark harness, with recorded results |
 | `sandbox/` | Standalone model definitions, interactive inference, inspection, and artifact analysis |
 | `docs/` | Architecture, design constraints, capabilities, and limitations |
 
@@ -155,6 +164,6 @@ and recorded results.
 - [Design constraints](docs/design-constraints.md)
 - [Model inspection](docs/inspection.md)
 - [Generated model artifacts](docs/model-artifacts.md)
-- [Current development state](docs/development-state.md)
+- [Development state](docs/development-state.md)
 - [Sandbox and binary inspection](sandbox/README.md)
 - [Benchmarks](benchmarks/README.md)

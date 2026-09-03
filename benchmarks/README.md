@@ -1,47 +1,14 @@
 # Benchmarks
 
-This directory contains ZGC performance measurements. The runnable cases live
-in `ops/`.
+This directory contains ZGC performance measurements at two levels:
 
-## Reference results
+- `ops/` measures individual tensor operations and layouts.
+- `models/` measures complete model execution through the generated ZGC
+  pipeline.
 
-Lower latency is better. Higher throughput is better.
-
-### Matmul shape scaling
-
-| Shape (M×K×N) | Layout | Average latency | Throughput |
-| --- | --- | ---: | ---: |
-| 32×32×32 | contiguous | 3.920 us | 16.72 GFLOP/s |
-| 64×64×64 | contiguous | 31.117 us | 16.85 GFLOP/s |
-| 128×128×128 | contiguous | 373.730 us | 11.22 GFLOP/s |
-| 32×128×64 | contiguous | 37.142 us | 14.12 GFLOP/s |
-
-### Matmul layout cost (64×64×64)
-
-| Layout | Average latency | Throughput | Relative to contiguous |
-| --- | ---: | ---: | ---: |
-| contiguous | 31.117 us | 16.85 GFLOP/s | 1.00× |
-| strided lhs | 32.838 us | 15.97 GFLOP/s | 0.95× |
-| strided rhs | 56.663 us | 9.25 GFLOP/s | 0.55× |
-| strided output | 238.867 us | 2.19 GFLOP/s | 0.13× |
-
-### Tensor operations
-
-| Case | Average latency | Element throughput | Contiguous-relative throughput |
-| --- | ---: | ---: | ---: |
-| ReLU, contiguous 16K | 1.763 us | 9.291 Gelem/s | — |
-| add, contiguous 128×128 | 3.927 us | 4.172 Gelem/s | 1.00× |
-| add, transposed views 128×128 | 80.387 us | 203.8 Melem/s | 0.05× |
-| add, broadcast bias 128×128 | 13.285 us | 1.233 Gelem/s | 0.30× |
-| exp, contiguous 16K | 113.446 us | 144.4 Melem/s | — |
-| sum axis, contiguous 256×256 | 8.188 us | 8.004 Gelem/s | 1.00× |
-| sum axis, strided 256×256 | 99.006 us | 661.9 Melem/s | 0.08× |
-| softmax axis, contiguous 256×256 | 923.519 us | 70.96 Melem/s | 1.00× |
-| softmax axis, strided 256×256 | 1.317 ms | 49.78 Melem/s | 0.70× |
-
-Recorded 2026-08-10 with Zig 0.16.0, `ReleaseFast`, x86_64 Darwin 24.6. These
-are local measurements, not cross-machine comparisons. Each value is the
-average of 10 timed runs using the case-specific defaults.
+The model suite covers small, medium, and large dense networks at batch sizes 1
+and 32. Recorded measurements and their environment are documented under
+[`reference/`](reference/README.md).
 
 ## Run
 
@@ -51,45 +18,94 @@ From the repository root:
 zig build benchmark -Dop=relu -Doptimize=ReleaseFast
 ```
 
-Without `-Dop`, the build runs the complete suite (`all`).
-
-Run the comparison suite with:
+Without `-Dop`, the build runs both tiers (`all`). Run either tier separately:
 
 ```sh
-zig build benchmark -Dop=all -Doptimize=ReleaseFast
+zig build benchmark -Dop=ops -Doptimize=ReleaseFast
+zig build benchmark -Dop=models -Doptimize=ReleaseFast
+```
+
+Run one model case with:
+
+```sh
+zig build benchmark -Dop=model -Dmodel=small -Dbatch=2 -Doptimize=ReleaseFast
+```
+
+Run every model shape at batch sizes 1 and 32 with:
+
+```sh
+./benchmarks/run-models.sh
+```
+
+Additional build options are forwarded to each case:
+
+```sh
+./benchmarks/run-models.sh -Dwarmup_ms=500 -Dsample_ms=100 -Druns=10
 ```
 
 Available selectors are:
 
-| Group | `-Dop` values |
+| Tier/group | `-Dop` values |
 | --- | --- |
-| Elementwise | `relu`, `add`, `add-strided`, `add-broadcast`, `exp` |
-| Reduction | `sum`, `sum-strided`, `softmax`, `softmax-strided` |
-| Matmul shapes | `matmul-32`, `matmul-64`, `matmul-128`, `matmul-rect` |
-| Matmul layouts | `matmul-lhs-strided`, `matmul-rhs-strided`, `matmul-output-strided` |
+| Suites | `all`, `ops`, `models` |
+| Elementwise | `relu`, `relu-16`, `relu-64`, `relu-256`, `add`, `add-strided`, `add-broadcast`, `exp` |
+| Reduction | `sum`, `sum-strided`, `softmax`, `softmax-strided`, `softmax-8`, `softmax-10` |
+| Matmul shapes | `matmul-32`, `matmul-64`, `matmul-128`, `matmul-rect`, `matmul-reference-16x8x24`, `matmul-reference-16x32x64` |
+| Matmul layouts | `matmul-lhs-strided`, `matmul-rhs-strided`, `matmul-output-strided`, `matmul-batch` |
+| Dense model | `model` with `-Dmodel=small\|medium\|large` and any positive `-Dbatch` |
+| Dense models, batch 1 | `model-small-b1`, `model-medium-b1`, `model-large-b1` |
+| Dense models, batch 32 | `model-small-b32`, `model-medium-b32`, `model-large-b32` |
 
-The case-specific defaults can be overridden with `-Diterations`, `-Druns`,
-and `-Dwarmup_iterations`. A zero iteration or warmup value selects the case
-default. Always report the Zig version, target, optimization mode, CPU/OS, case
-shape, and benchmark configuration alongside results.
+The model cases are:
 
-The timer surrounds a batch of invocations, so its two reads are amortized over
-the batch. Each case owns its input and output buffers, creates tensor views
-outside the timed loop, warms the kernel first, and prevents the result from
-being optimized away.
+| Name | Layer widths | Activations | Parameters | Batches |
+| --- | --- | --- | ---: | --- |
+| small | 32 → 16 → 8 | ReLU, softmax | 664 | 1, 32 |
+| medium | 128 → 64 → 10 | ReLU, softmax | 8,906 | 1, 32 |
+| large | 1024 → 256 → 128 → 64 → 2 | ReLU, ReLU, ReLU, softmax | 303,682 | 1, 32 |
+
+The `matmul-reference-*` selectors retain two useful reference shapes in the
+active ZGC matmul suite.
+
+By default, each case receives a two-second untimed warmup followed by 30 timed
+samples. After warmup, the harness calibrates the case's iteration count against
+a 250 ms sample target, providing approximately 7.5 seconds or more of timed
+execution per case.
+Calibration may select a longer sample when a case's seed iteration count
+already exceeds the target.
+
+Use `-Dsample_ms` and `-Dwarmup_ms` to change the duration targets, and `-Druns`
+to change the sample count. Explicit `-Diterations` or `-Dwarmup_iterations`
+values bypass calibration or duration-based warmup respectively. These
+overrides are useful for smoke tests but should be reported whenever their
+results are retained. Always report the Zig version, target, optimization mode,
+CPU/OS, case shape, and benchmark configuration alongside results.
+
+The timer surrounds a calibrated group of invocations, so its two reads are
+amortized. Reported statistics include minimum, median, average, p95, maximum,
+standard deviation, and coefficient of variation across independently timed
+samples. Each operation case owns its buffers, warms the kernel first, and
+prevents the result from being optimized away. Model parameter initialization,
+source copying, and input binding happen before calibration, warmup, and
+timing. A model invocation is one forward pass over its configured batch. The
+`normalized` line reports nanoseconds per inference, and the work throughput
+reports inferences per second.
+Model inputs, weights, and biases are initialized deterministically before
+timing.
 
 ## Coverage
 
 | Layer | Cases | Status |
 | --- | --- | --- |
 | Primitive | ReLU, add, exp | Measured, including strided and broadcast layouts |
-| Primitive | matmul | Measured across four shapes and four 64³ layouts |
+| Primitive | matmul | Measured across four shapes, four 64³ layouts, and a batch-contiguous layout |
 | Primitive | sum and softmax | Measured across contiguous and strided axes |
 | Primitive | sub and remaining layout/elementwise ops | Not covered |
-| Fused/operator | dense + activation, attention projections, feed-forward | Not covered |
-| End to end | small MLP, transformer block; batch and sequence sweeps | Not covered |
+| Fused/operator | dense + activation | Covered by the model tier |
+| End to end | small, medium, and large dense networks at batch 1 and 32 | Measured through generated ZGC models |
+| End to end | transformer block; sequence sweeps | Not covered |
 | Resources | workspace, allocations, binary size | Not covered |
 
-Operation cases live in `benchmarks/ops/` and are selected in `main.zig`. Each
-case exposes its name, default iteration counts, work unit, work and byte counts
-per invocation, `init`, and `run`.
+Cases are selected in `main.zig`. Each exposes its name, default iteration
+counts, work unit, work and byte counts per invocation, `init`, and `run`.
+Model cases may also expose a preparation hook and normalization metadata.
