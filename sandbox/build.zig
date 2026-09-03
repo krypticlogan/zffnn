@@ -15,7 +15,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     const sandbox_model_mod = b.createModule(.{
-        .root_source_file = b.path("src/relu-model.zig"),
+        .root_source_file = b.path("src/digit-classifier.zig"),
         .target = target,
         .optimize = optimize,
         .imports = &.{
