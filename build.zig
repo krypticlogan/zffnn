@@ -95,16 +95,24 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&runner_test_exe.step);
 
     // benchmarks
-    const benchmark_op = b.option([]const u8, "op", "Tensor operation to benchmark") orelse "all";
-    const benchmark_iterations = b.option(usize, "iterations", "Operation invocations per timed run (0 selects the case default)") orelse 0;
-    const benchmark_runs = b.option(usize, "runs", "Number of timed runs") orelse 10;
-    const benchmark_warmup = b.option(usize, "warmup_iterations", "Untimed warmup invocations (0 selects the case default)") orelse 0;
+    const benchmark_op = b.option([]const u8, "op", "Operation, model, or benchmark tier to run") orelse "all";
+    const benchmark_model = b.option([]const u8, "model", "Dense model size used by -Dop=model") orelse "small";
+    const benchmark_batch = b.option(usize, "batch", "Compile-time batch size used by -Dop=model") orelse 1;
+    const benchmark_iterations = b.option(usize, "iterations", "Benchmark invocations per timed sample (0 calibrates to sample_ms)") orelse 0;
+    const benchmark_runs = b.option(usize, "runs", "Number of timed samples") orelse 30;
+    const benchmark_warmup = b.option(usize, "warmup_iterations", "Untimed warmup invocations (0 warms for warmup_ms)") orelse 0;
+    const benchmark_sample_ms = b.option(usize, "sample_ms", "Minimum duration of each automatically calibrated timed sample") orelse 250;
+    const benchmark_warmup_ms = b.option(usize, "warmup_ms", "Duration of the automatic untimed warmup") orelse 2_000;
 
     const benchmark_options = b.addOptions();
     benchmark_options.addOption([]const u8, "op", benchmark_op);
+    benchmark_options.addOption([]const u8, "model", benchmark_model);
+    benchmark_options.addOption(usize, "batch", benchmark_batch);
     benchmark_options.addOption(usize, "iterations", benchmark_iterations);
     benchmark_options.addOption(usize, "runs", benchmark_runs);
     benchmark_options.addOption(usize, "warmup_iterations", benchmark_warmup);
+    benchmark_options.addOption(usize, "sample_ms", benchmark_sample_ms);
+    benchmark_options.addOption(usize, "warmup_ms", benchmark_warmup_ms);
 
     const benchmark_exe = b.addExecutable(.{
         .name = "zgc-benchmark",
@@ -119,6 +127,6 @@ pub fn build(b: *std.Build) void {
         }),
     });
     const run_benchmark = b.addRunArtifact(benchmark_exe);
-    const benchmark_step = b.step("benchmark", "Benchmark the operation selected by -Dop");
+    const benchmark_step = b.step("benchmark", "Run the benchmark selected by -Dop");
     benchmark_step.dependOn(&run_benchmark.step);
 }

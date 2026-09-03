@@ -58,7 +58,7 @@ fn MatmulBenchmark(
                 .strides = if (output_layout == .contiguous) .{ n, 1 } else .{ 1, m },
                 .offset = 0,
             };
-            const op: zgc.Op = .{ .compute = .matmul };
+            const op: zgc.Op = .{ .compute = .{ .matmul = .{} } };
             for (0..run_iterations) |_| {
                 op.execute(.{ lhs, rhs }, output);
                 std.mem.doNotOptimizeAway(&self.output_storage);
@@ -74,3 +74,6 @@ pub const Rectangular = MatmulBenchmark(32, 128, 64, .contiguous, .contiguous, .
 pub const LhsStrided = MatmulBenchmark(64, 64, 64, .transposed, .contiguous, .contiguous, "matmul/f32/64x64x64/lhs-strided", 100);
 pub const RhsStrided = MatmulBenchmark(64, 64, 64, .contiguous, .transposed, .contiguous, "matmul/f32/64x64x64/rhs-strided", 100);
 pub const OutputStrided = MatmulBenchmark(64, 64, 64, .contiguous, .contiguous, .transposed, "matmul/f32/64x64x64/output-strided", 100);
+pub const BatchContiguous = MatmulBenchmark(32, 128, 64, .transposed, .contiguous, .transposed, "matmul/f32/32x128x64/batch-contiguous", 100);
+pub const Reference16x8x24 = MatmulBenchmark(16, 8, 24, .contiguous, .contiguous, .contiguous, "matmul/f32/16x8x24/reference", 5_000);
+pub const Reference16x32x64 = MatmulBenchmark(16, 32, 64, .contiguous, .contiguous, .contiguous, "matmul/f32/16x32x64/reference", 1_000);

@@ -76,3 +76,54 @@ pub const SumContiguous = ReductionBenchmark(.contiguous, .sum, "sum/f32/256x256
 pub const SumStrided = ReductionBenchmark(.axis_strided, .sum, "sum/f32/256x256/axis1-strided");
 pub const SoftmaxContiguous = ReductionBenchmark(.contiguous, .softmax, "softmax/f32/256x256/axis1-contiguous");
 pub const SoftmaxStrided = ReductionBenchmark(.axis_strided, .softmax, "softmax/f32/256x256/axis1-strided");
+
+fn SmallSoftmaxBenchmark(
+    comptime columns_small: usize,
+    comptime benchmark_name: []const u8,
+) type {
+    return struct {
+        const Self = @This();
+
+        pub const name = benchmark_name;
+        pub const default_iterations = 500_000;
+        pub const default_warmup_iterations = 50_000;
+        pub const work_items_per_invocation: f64 = columns_small;
+        pub const work_unit = "elements";
+        pub const bytes_per_invocation: f64 = @sizeOf(f32) * columns_small * 2;
+
+        input_storage: [columns_small]f32,
+        output_storage: [columns_small]f32,
+
+        pub fn init() Self {
+            var result: Self = undefined;
+            for (&result.input_storage, 0..) |*value, index| {
+                value.* = @as(f32, @floatFromInt(index)) / 10.0 - 0.5;
+            }
+            result.output_storage = @splat(0);
+            return result;
+        }
+
+        pub fn run(self: *Self, iterations: usize) void {
+            const input: zgc.Tensor.ConstView(f32, 2) = .{
+                .storage = &self.input_storage,
+                .shape = .{ 1, columns_small },
+                .strides = .{ columns_small, 1 },
+                .offset = 0,
+            };
+            const output: zgc.Tensor.View(f32, 2) = .{
+                .storage = &self.output_storage,
+                .shape = .{ 1, columns_small },
+                .strides = .{ columns_small, 1 },
+                .offset = 0,
+            };
+            const op: zgc.Op = .{ .compute = .{ .softmax = .{ .axis = 1 } } };
+            for (0..iterations) |_| {
+                op.execute(.{input}, output);
+                std.mem.doNotOptimizeAway(&self.output_storage);
+            }
+        }
+    };
+}
+
+pub const Softmax8 = SmallSoftmaxBenchmark(8, "softmax/f32/1x8");
+pub const Softmax10 = SmallSoftmaxBenchmark(10, "softmax/f32/1x10");
