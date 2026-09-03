@@ -66,9 +66,10 @@ fn hasLogicalRowMajorLayout(comptime info: anytype) bool {
 pub fn Model(
     comptime SourceKey: type,
     comptime capacities: Graph.Capacity,
-    comptime graph: Graph.Graph(capacities),
+    comptime Validated: type,
     comptime SourcePlan: type,
 ) type {
+    const graph = Validated.graph;
     const plan = Storage.MemoryPlan(capacities, graph, SourcePlan);
     return struct {
         const Self = @This();
@@ -100,8 +101,7 @@ pub fn Model(
                 @compileError("output index is outside the graph's outputs");
             }
             const tensor_id = graph.outputs[output_index].?;
-            const info = graph.tensors[tensor_id].?;
-            break :blk Tensor.ConstView(info.dtype.Scalar(), info.shape.rank);
+            break :blk Validated.ConstView(tensor_id);
         } {
             const tensor_id = graph.outputs[output_index].?;
             return model.constTensorView(tensor_id);
@@ -186,11 +186,7 @@ pub fn Model(
                 var input_types: [node.input_count]type = undefined;
                 for (0..node.input_count) |input_index| {
                     const tensor_id = graph.input_refs[node.input_start + input_index].?;
-                    const info = graph.tensors[tensor_id].?;
-                    input_types[input_index] = Tensor.ConstView(
-                        info.dtype.Scalar(),
-                        info.shape.rank,
-                    );
+                    input_types[input_index] = Validated.ConstView(tensor_id);
                 }
                 break :blk std.meta.Tuple(&input_types);
             };
@@ -206,9 +202,7 @@ pub fn Model(
         }
 
         fn tensorView(model: *Self, comptime tensor_id: Tensor.Id) blk: {
-            const info = graph.tensors[tensor_id].?;
-            break :blk // return type
-            Tensor.View(info.dtype.Scalar(), info.shape.rank);
+            break :blk Validated.View(tensor_id);
         } {
             const info = graph.tensors[tensor_id].?;
             const T = info.dtype.Scalar();
@@ -217,15 +211,11 @@ pub fn Model(
 
             return .{
                 .storage = std.mem.bytesAsSlice(T, aligned_bytes),
-                .shape = info.shape.dims[0..info.shape.rank].*,
-                .strides = info.layout.strides[0..info.shape.rank].*,
-                .offset = info.layout.offset,
             };
         }
 
         fn constTensorView(model: *const Self, comptime tensor_id: Tensor.Id) blk: {
-            const info = graph.tensors[tensor_id].?;
-            break :blk Tensor.ConstView(info.dtype.Scalar(), info.shape.rank);
+            break :blk Validated.ConstView(tensor_id);
         } {
             const info = graph.tensors[tensor_id].?;
             const T = info.dtype.Scalar();
@@ -233,9 +223,6 @@ pub fn Model(
 
             return .{
                 .storage = std.mem.bytesAsSlice(T, aligned_bytes),
-                .shape = info.shape.dims[0..info.shape.rank].*,
-                .strides = info.layout.strides[0..info.shape.rank].*,
-                .offset = info.layout.offset,
             };
         }
 

@@ -7,10 +7,14 @@ const simd = @import("simd.zig");
 /// implementation; strided lines use the same operator's scalar implementation.
 fn reduce(input: anytype, context: anytype, comptime Operator: type) accumulation.AccumulatorScalar(@TypeOf(input).dtype) {
     const Input = @TypeOf(input);
-    comptime std.debug.assert(Input.rank == 1);
-
-    if (input.contiguousSlice()) |values| {
-        return simd.reduce(Input.dtype, values, context, Operator);
+    if (comptime hasStaticGeometry(Input)) {
+        if (comptime Input.static_is_contiguous) {
+            return simd.reduce(Input.dtype, input.contiguousSlice().?, context, Operator);
+        }
+    } else {
+        if (input.contiguousSlice()) |values| {
+            return simd.reduce(Input.dtype, values, context, Operator);
+        }
     }
 
     var result = Operator.identity(Input.dtype, context);
@@ -30,17 +34,23 @@ fn reduce(input: anytype, context: anytype, comptime Operator: type) accumulatio
 fn map(input: anytype, output: anytype, context: anytype, comptime Operator: type) void {
     const Input = @TypeOf(input);
     const Output = @TypeOf(output);
-    comptime {
-        std.debug.assert(Input.rank == 1);
-        std.debug.assert(Output.rank == 1);
-        std.debug.assert(Input.scalar_type == Output.scalar_type);
-    }
-    std.debug.assert(input.len() == output.len());
-
-    if (input.contiguousSlice()) |input_values| {
-        if (output.contiguousSlice()) |output_values| {
-            simd.map(Input.dtype, input_values, output_values, context, Operator);
+    if (comptime hasStaticGeometry(Input) and hasStaticGeometry(Output)) {
+        if (comptime Input.static_is_contiguous and Output.static_is_contiguous) {
+            simd.map(
+                Input.dtype,
+                input.contiguousSlice().?,
+                output.contiguousSlice().?,
+                context,
+                Operator,
+            );
             return;
+        }
+    } else {
+        if (input.contiguousSlice()) |input_values| {
+            if (output.contiguousSlice()) |output_values| {
+                simd.map(Input.dtype, input_values, output_values, context, Operator);
+                return;
+            }
         }
     }
 
@@ -50,6 +60,10 @@ fn map(input: anytype, output: anytype, context: anytype, comptime Operator: typ
             Operator.scalar(Input.dtype, input.get(.{index}), context),
         );
     }
+}
+
+fn hasStaticGeometry(comptime View: type) bool {
+    return @hasDecl(View, "geometry_is_static") and View.geometry_is_static;
 }
 
 pub fn sum(input: anytype) accumulation.AccumulatorScalar(@TypeOf(input).dtype) {
@@ -88,10 +102,6 @@ pub fn sum(input: anytype) accumulation.AccumulatorScalar(@TypeOf(input).dtype) 
 }
 
 pub fn max(input: anytype) accumulation.AccumulatorScalar(@TypeOf(input).dtype) {
-    const Input = @TypeOf(input);
-    comptime std.debug.assert(Input.dtype.kind() == .float);
-    std.debug.assert(input.len() > 0);
-
     return reduce(input, {}, struct {
         pub fn identity(comptime dtype: Dtype, _: void) accumulation.AccumulatorScalar(dtype) {
             return -std.math.inf(accumulation.AccumulatorScalar(dtype));
@@ -133,9 +143,6 @@ pub fn shiftedExpSum(
     input: anytype,
     shift: accumulation.AccumulatorScalar(@TypeOf(input).dtype),
 ) accumulation.AccumulatorScalar(@TypeOf(input).dtype) {
-    const Input = @TypeOf(input);
-    comptime std.debug.assert(Input.dtype.kind() == .float);
-
     return reduce(input, shift, struct {
         pub fn identity(comptime dtype: Dtype, _: accumulation.AccumulatorScalar(dtype)) accumulation.AccumulatorScalar(dtype) {
             return 0;
@@ -183,8 +190,6 @@ pub fn normalizedExp(
     denominator: accumulation.AccumulatorScalar(@TypeOf(input).dtype),
 ) void {
     const Input = @TypeOf(input);
-    comptime std.debug.assert(Input.dtype.kind() == .float);
-
     const Context = struct {
         shift: accumulation.AccumulatorScalar(Input.dtype),
         denominator: accumulation.AccumulatorScalar(Input.dtype),

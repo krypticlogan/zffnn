@@ -1,8 +1,5 @@
-/// Compile-time matmul traversal selected by graph lowering. `automatic` is
-/// retained for direct kernel use where concrete layouts are not supplied by a
-/// compiled graph.
+/// Compile-time matmul traversal selected by graph lowering.
 pub const Strategy = enum {
-    automatic,
     output_columns,
     contracted_axis,
     output_rows,
@@ -13,5 +10,5 @@ pub const Strategy = enum {
 /// parameters can be added here without changing the operation dispatch
 /// boundary.
 pub const Plan = struct {
-    strategy: Strategy = .automatic,
+    strategy: Strategy,
 };

@@ -44,8 +44,6 @@ pub fn map(
     context: anytype,
     comptime Operator: type,
 ) void {
-    std.debug.assert(input.len == output.len);
-
     const vector_len = std.simd.suggestVectorLength(dtype.Scalar()) orelse 1;
     const Vector = dtype.Vector(vector_len);
 

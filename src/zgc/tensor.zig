@@ -290,6 +290,236 @@ pub fn ConstView(comptime T: type, comptime tensor_rank: usize) type {
     };
 }
 
+/// Mutable view whose tensor geometry is part of its type. Compiled models use
+/// this form so shape, strides, base offset, element count, and layout
+/// properties are available to kernels at compile time.
+pub fn StaticView(
+    comptime T: type,
+    comptime tensor_shape: anytype,
+    comptime tensor_strides: anytype,
+    comptime tensor_offset: usize,
+) type {
+    return StaticViewImpl(T, tensor_shape, tensor_strides, tensor_offset, false);
+}
+
+/// Read-only counterpart to `StaticView`.
+pub fn StaticConstView(
+    comptime T: type,
+    comptime tensor_shape: anytype,
+    comptime tensor_strides: anytype,
+    comptime tensor_offset: usize,
+) type {
+    return StaticViewImpl(T, tensor_shape, tensor_strides, tensor_offset, true);
+}
+
+fn StaticViewImpl(
+    comptime T: type,
+    comptime tensor_shape: anytype,
+    comptime tensor_strides: anytype,
+    comptime tensor_offset: usize,
+    comptime read_only: bool,
+) type {
+    const tensor_rank = tensor_shape.len;
+    if (tensor_strides.len != tensor_rank) {
+        @compileError("static tensor shape and stride ranks must match");
+    }
+    const shape_value: [tensor_rank]usize = tensor_shape;
+    const strides_value: [tensor_rank]isize = tensor_strides;
+    const Storage = if (read_only) []const T else []T;
+    const element_count = comptime elementCount(shape_value);
+    const contiguous = comptime isContiguousLayout(shape_value, strides_value);
+    const dense_positive = comptime isDensePositiveLayout(shape_value, strides_value);
+
+    return struct {
+        const Self = @This();
+        pub const scalar_type = T;
+        pub const dtype = Dtype.fromScalar(T);
+        pub const rank = tensor_rank;
+        pub const geometry_is_static = true;
+        pub const base_offset = tensor_offset;
+        pub const static_shape = shape_value;
+        pub const static_strides = strides_value;
+        pub const static_element_count = element_count;
+        pub const static_is_contiguous = contiguous;
+        pub const static_is_dense_positive = dense_positive;
+
+        comptime shape: [rank]usize = shape_value,
+        comptime strides: [rank]isize = strides_value,
+        storage: Storage,
+        /// Additional offset introduced by a runtime-selected subview.
+        runtime_offset: usize = 0,
+
+        pub fn len(_: *const Self) usize {
+            return element_count;
+        }
+
+        pub fn elementOffset(self: *const Self, indices: [rank]usize) usize {
+            var offset: isize = @intCast(base_offset + self.runtime_offset);
+            inline for (strides_value, indices) |stride, index| {
+                offset += @as(isize, @intCast(index)) * stride;
+            }
+            return @intCast(offset);
+        }
+
+        pub fn elementOffsetFromLinear(self: *const Self, linear_index: usize) usize {
+            if (comptime rank == 0) {
+                return base_offset + self.runtime_offset;
+            }
+            var remaining = linear_index;
+            var offset: isize = @intCast(base_offset + self.runtime_offset);
+            comptime var axis = rank;
+            inline while (axis > 0) {
+                axis -= 1;
+                const extent = shape_value[axis];
+                const index = remaining % extent;
+                remaining /= extent;
+                offset += @as(isize, @intCast(index)) * strides_value[axis];
+            }
+            return @intCast(offset);
+        }
+
+        pub fn get(self: *const Self, indices: [rank]usize) T {
+            return self.storage[self.elementOffset(indices)];
+        }
+
+        pub fn set(self: *const Self, indices: [rank]usize, value: T) void {
+            if (comptime read_only) {
+                @compileError("cannot mutate a static const tensor view");
+            }
+            self.storage[self.elementOffset(indices)] = value;
+        }
+
+        pub fn isContiguous(_: *const Self) bool {
+            return contiguous;
+        }
+
+        pub fn contiguousSlice(self: *const Self) ?Storage {
+            if (comptime !contiguous) return null;
+            const offset = base_offset + self.runtime_offset;
+            return self.storage[offset..][0..element_count];
+        }
+
+        pub fn denseSlice(self: *const Self) ?Storage {
+            if (comptime !dense_positive) return null;
+            const offset = base_offset + self.runtime_offset;
+            return self.storage[offset..][0..element_count];
+        }
+
+        pub fn axisSlice(
+            self: *const Self,
+            comptime axis: usize,
+            slice_index: usize,
+        ) StaticViewImpl(
+            T,
+            .{shape_value[axis]},
+            .{strides_value[axis]},
+            0,
+            read_only,
+        ) {
+            if (comptime rank == 0 or axis >= rank) {
+                @compileError("slice axis is outside the tensor rank");
+            }
+
+            var remaining = slice_index;
+            var offset: isize = @intCast(base_offset + self.runtime_offset);
+            comptime var current_axis = rank;
+            inline while (current_axis > 0) {
+                current_axis -= 1;
+                if (current_axis == axis) continue;
+                const extent = shape_value[current_axis];
+                const index = remaining % extent;
+                remaining /= extent;
+                offset += @as(isize, @intCast(index)) * strides_value[current_axis];
+            }
+
+            return .{
+                .storage = self.storage,
+                .runtime_offset = @intCast(offset),
+            };
+        }
+
+        pub fn broadcastTo(
+            self: *const Self,
+            comptime target_rank: usize,
+            comptime target_shape: [target_rank]usize,
+        ) StaticViewImpl(
+            T,
+            target_shape,
+            broadcastStrides(shape_value, strides_value, target_shape),
+            base_offset,
+            read_only,
+        ) {
+            if (comptime rank > target_rank) {
+                @compileError("broadcast target rank cannot be smaller than its source rank");
+            }
+            return .{
+                .storage = self.storage,
+                .runtime_offset = self.runtime_offset,
+            };
+        }
+    };
+}
+
+fn elementCount(comptime shape: anytype) usize {
+    var count: usize = 1;
+    for (shape) |extent| count *= extent;
+    return count;
+}
+
+fn isContiguousLayout(comptime shape: anytype, comptime strides: anytype) bool {
+    var expected: isize = 1;
+    var axis = shape.len;
+    while (axis > 0) {
+        axis -= 1;
+        if (shape[axis] > 1 and strides[axis] != expected) return false;
+        expected *= @intCast(shape[axis]);
+    }
+    return true;
+}
+
+fn isDensePositiveLayout(comptime shape: anytype, comptime strides: anytype) bool {
+    var visited: [shape.len]bool = @splat(false);
+    var expected_stride: isize = 1;
+    var remaining_axes: usize = 0;
+    for (shape) |extent| {
+        if (extent > 1) remaining_axes += 1;
+    }
+    while (remaining_axes > 0) {
+        var matched = false;
+        for (shape, strides, 0..) |extent, stride, axis| {
+            if (extent <= 1 or visited[axis] or stride != expected_stride) continue;
+            visited[axis] = true;
+            expected_stride *= @intCast(extent);
+            remaining_axes -= 1;
+            matched = true;
+            break;
+        }
+        if (!matched) return false;
+    }
+    return true;
+}
+
+fn broadcastStrides(
+    comptime source_shape: anytype,
+    comptime source_strides: anytype,
+    comptime target_shape: anytype,
+) [target_shape.len]isize {
+    if (source_shape.len > target_shape.len) {
+        @compileError("broadcast target rank cannot be smaller than its source rank");
+    }
+    var result: [target_shape.len]isize = @splat(0);
+    var source_axis = source_shape.len;
+    var target_axis = target_shape.len;
+    while (source_axis > 0) {
+        source_axis -= 1;
+        target_axis -= 1;
+        if (source_shape[source_axis] == target_shape[target_axis]) {
+            result[target_axis] = source_strides[source_axis];
+        }
+    }
+    return result;
+}
+
 fn isDensePositive(view: anytype) bool {
     const rank = @TypeOf(view.*).rank;
     var visited: [rank]bool = @splat(false);

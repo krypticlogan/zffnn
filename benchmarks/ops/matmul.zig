@@ -58,7 +58,7 @@ fn MatmulBenchmark(
                 .strides = if (output_layout == .contiguous) .{ n, 1 } else .{ 1, m },
                 .offset = 0,
             };
-            const op: zgc.Op = .{ .compute = .{ .matmul = .{} } };
+            const op: zgc.Op = .{ .compute = .{ .matmul = .{ .strategy = .output_columns } } };
             for (0..run_iterations) |_| {
                 op.execute(.{ lhs, rhs }, output);
                 std.mem.doNotOptimizeAway(&self.output_storage);

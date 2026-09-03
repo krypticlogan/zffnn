@@ -2,79 +2,27 @@ const std = @import("std");
 const accumulation = @import("accumulation.zig");
 const Matmul = @import("../matmul.zig");
 
-/// Multiply two rank-2 tensors. SIMD traversal is selected from the participating
-/// axis strides; scalar logical indexing remains the universal fallback.
+/// Execute one compile-time-selected traversal.
 ///
 /// lhs:    [M, K]
 /// rhs:    [K, N]
 /// output: [M, N]
-pub fn matmul(lhs: anytype, rhs: anytype, output: anytype) void {
-    matmulWithPlan(.automatic, lhs, rhs, output);
-}
-
-/// Execute one compile-time-selected traversal. Generated models never use
-/// `automatic`; it exists for direct operation calls with runtime views.
 pub fn matmulWithPlan(
     comptime strategy: Matmul.Strategy,
     lhs: anytype,
     rhs: anytype,
     output: anytype,
 ) void {
-    const Lhs = @TypeOf(lhs);
-    const Rhs = @TypeOf(rhs);
-    const Output = @TypeOf(output);
-
-    comptime {
-        if (Lhs.rank != 2 or Rhs.rank != 2 or Output.rank != 2) {
-            @compileError("matmul requires rank-2 input and output views");
-        }
-        if (Lhs.scalar_type != Rhs.scalar_type or
-            Lhs.scalar_type != Output.scalar_type)
-        {
-            @compileError("matmul input and output dtypes must match");
-        }
-        if (Output.dtype != .f32) {
-            @compileError("the matmul kernel currently supports only f32");
-        }
-    }
-
     const m = lhs.shape[0];
     const k_len = lhs.shape[1];
     const n = rhs.shape[1];
 
-    std.debug.assert(rhs.shape[0] == k_len);
-    std.debug.assert(output.shape[0] == m);
-    std.debug.assert(output.shape[1] == n);
-
-    if (comptime strategy == .automatic) {
-        return switch (selectStrategy(lhs, rhs, output)) {
-            .automatic => unreachable,
-            .output_columns => matmulOutputColumns(lhs, rhs, output, m, k_len, n),
-            .contracted_axis => matmulContractedAxis(lhs, rhs, output, m, k_len, n),
-            .output_rows => matmulOutputRows(lhs, rhs, output, m, k_len, n),
-            .scalar => matmulScalar(lhs, rhs, output, m, k_len, n),
-        };
-    }
     switch (comptime strategy) {
-        .automatic => unreachable,
         .output_columns => matmulOutputColumns(lhs, rhs, output, m, k_len, n),
         .contracted_axis => matmulContractedAxis(lhs, rhs, output, m, k_len, n),
         .output_rows => matmulOutputRows(lhs, rhs, output, m, k_len, n),
         .scalar => matmulScalar(lhs, rhs, output, m, k_len, n),
     }
-}
-
-fn selectStrategy(lhs: anytype, rhs: anytype, output: anytype) Matmul.Strategy {
-    if (rhs.strides[1] == 1 and output.strides[1] == 1) {
-        return .output_columns;
-    }
-    if (lhs.strides[1] == 1 and rhs.strides[0] == 1) {
-        return .contracted_axis;
-    }
-    if (lhs.strides[0] == 1 and output.strides[0] == 1) {
-        return .output_rows;
-    }
-    return .scalar;
 }
 
 fn matmulOutputColumns(

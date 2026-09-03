@@ -32,7 +32,7 @@ test "matmul multiplies contiguous row-major rank-2 tensors" {
         .offset = 0,
     };
 
-    const op: zgc.Op = .{ .compute = .{ .matmul = .{} } };
+    const op: zgc.Op = .{ .compute = .{ .matmul = .{ .strategy = .scalar } } };
     op.execute(.{ lhs, rhs }, output);
 
     try std.testing.expectEqualSlices(
@@ -89,7 +89,7 @@ test "matmul handles a native SIMD chunk followed by a column tail" {
         .offset = 0,
     };
 
-    const op: zgc.Op = .{ .compute = .{ .matmul = .{} } };
+    const op: zgc.Op = .{ .compute = .{ .matmul = .{ .strategy = .scalar } } };
     op.execute(.{ lhs, rhs }, output);
 
     try std.testing.expectEqualSlices(f32, &expected, &output_data);
@@ -119,7 +119,7 @@ test "matmul respects contiguous view offsets" {
         .offset = 1,
     };
 
-    const op: zgc.Op = .{ .compute = .{ .matmul = .{} } };
+    const op: zgc.Op = .{ .compute = .{ .matmul = .{ .strategy = .scalar } } };
     op.execute(.{ lhs, rhs }, output);
 
     try std.testing.expectEqualSlices(
@@ -153,7 +153,7 @@ test "matmul supports strided inputs and output" {
         .offset = 0,
     };
 
-    const op: zgc.Op = .{ .compute = .{ .matmul = .{} } };
+    const op: zgc.Op = .{ .compute = .{ .matmul = .{ .strategy = .scalar } } };
     op.execute(.{ lhs, rhs }, output);
 
     try std.testing.expectEqualSlices(
@@ -206,7 +206,7 @@ test "matmul vectorizes output columns with a transposed lhs" {
         .offset = 0,
     };
 
-    const op: zgc.Op = .{ .compute = .{ .matmul = .{} } };
+    const op: zgc.Op = .{ .compute = .{ .matmul = .{ .strategy = .scalar } } };
     op.execute(.{ lhs, rhs }, output);
 
     try std.testing.expectEqualSlices(f32, &expected, &output_storage);
@@ -259,7 +259,7 @@ test "matmul vectorizes the contracted axis for a transposed rhs" {
         .offset = 0,
     };
 
-    const op: zgc.Op = .{ .compute = .{ .matmul = .{} } };
+    const op: zgc.Op = .{ .compute = .{ .matmul = .{ .strategy = .scalar } } };
     op.execute(.{ lhs, rhs }, output);
 
     try std.testing.expectEqualSlices(f32, &expected, &output_storage);
@@ -311,7 +311,7 @@ test "matmul vectorizes output rows for column-major lhs and output" {
         .offset = 0,
     };
 
-    const op: zgc.Op = .{ .compute = .{ .matmul = .{} } };
+    const op: zgc.Op = .{ .compute = .{ .matmul = .{ .strategy = .scalar } } };
     op.execute(.{ lhs, rhs }, output);
 
     try std.testing.expectEqualSlices(f32, &expected, &output_storage);
@@ -341,7 +341,7 @@ test "matmul retains a scalar fallback for incompatible strides" {
         .offset = 0,
     };
 
-    const op: zgc.Op = .{ .compute = .{ .matmul = .{} } };
+    const op: zgc.Op = .{ .compute = .{ .matmul = .{ .strategy = .scalar } } };
     op.execute(.{ lhs, rhs }, output);
 
     try std.testing.expectEqualSlices(

@@ -6,8 +6,6 @@ const special = @import("kernels/special.zig");
 
 /// Route graph operations to a kernel family.
 pub fn execute(comptime op: Op.Compute, inputs: anytype, output: anytype) void {
-    assertReadOnlyInputs(inputs);
-
     switch (op) {
         .relu => elementwise.relu(inputs[0], output),
         .exp => elementwise.exp(inputs[0], output),
@@ -21,14 +19,5 @@ pub fn execute(comptime op: Op.Compute, inputs: anytype, output: anytype) void {
         ),
         .sum => |attrs| reduction.sum(inputs[0], output, attrs.axis),
         .softmax => |attrs| special.softmax(inputs[0], output, attrs.axis),
-    }
-}
-
-fn assertReadOnlyInputs(inputs: anytype) void {
-    inline for (inputs) |input| {
-        const storage = @typeInfo(@TypeOf(input.storage)).pointer;
-        if (!storage.is_const) {
-            @compileError("operation inputs must use Tensor.ConstView");
-        }
     }
 }

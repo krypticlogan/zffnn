@@ -6,24 +6,21 @@ const Dtype = @import("../dtype.zig").Dtype;
 fn unary(input: anytype, output: anytype, comptime Operator: type) void {
     const Input = @TypeOf(input);
     const Output = @TypeOf(output);
-
-    comptime {
-        if (Input.scalar_type != Output.scalar_type) {
-            @compileError("elementwise input and output dtypes must match");
-        }
-        if (Input.rank != Output.rank) {
-            @compileError("elementwise input and output ranks must match");
-        }
-    }
-
-    std.debug.assert(std.mem.eql(usize, &input.shape, &output.shape));
-
     const dtype = Input.dtype;
-    if (std.mem.eql(isize, &input.strides, &output.strides)) {
-        if (input.denseSlice()) |input_storage| {
-            if (output.denseSlice()) |output_storage| {
-                applyUnaryDense(input_storage, output_storage, dtype, Operator);
-                return;
+    if (comptime hasStaticGeometry(Input) and hasStaticGeometry(Output)) {
+        if (comptime std.mem.eql(isize, &Input.static_strides, &Output.static_strides) and
+            Input.static_is_dense_positive and Output.static_is_dense_positive)
+        {
+            applyUnaryDense(input.denseSlice().?, output.denseSlice().?, dtype, Operator);
+            return;
+        }
+    } else {
+        if (std.mem.eql(isize, &input.strides, &output.strides)) {
+            if (input.denseSlice()) |input_storage| {
+                if (output.denseSlice()) |output_storage| {
+                    applyUnaryDense(input_storage, output_storage, dtype, Operator);
+                    return;
+                }
             }
         }
     }
@@ -44,7 +41,6 @@ fn applyUnaryDense(
     comptime dtype: Dtype,
     comptime Operator: type,
 ) void {
-    std.debug.assert(input_storage.len == output_storage.len);
     const vector_len = std.simd.suggestVectorLength(dtype.Scalar()) orelse 1;
     const Vector = dtype.Vector(vector_len);
 
@@ -61,31 +57,47 @@ fn applyUnaryDense(
 /// Apply a element-wise binary operator through a contiguous SIMD fast path or a generic
 /// strided traversal.
 fn binary(a: anytype, b: anytype, output: anytype, comptime Operator: type) void {
-    const A = @TypeOf(a);
-    const B = @TypeOf(b);
     const Output = @TypeOf(output);
 
-    comptime {
-        if (A.scalar_type != B.scalar_type) {
-            @compileError("binary elementwise input dtypes must match");
-        }
-        if (A.scalar_type != Output.scalar_type) {
-            @compileError("elementwise input and output dtypes must match");
-        }
-    }
-
-    const a_view = a.broadcastTo(Output.rank, output.shape);
-    const b_view = b.broadcastTo(Output.rank, output.shape);
+    const output_shape = if (comptime hasStaticGeometry(Output))
+        Output.static_shape
+    else
+        output.shape;
+    const a_view = a.broadcastTo(Output.rank, output_shape);
+    const b_view = b.broadcastTo(Output.rank, output_shape);
+    const AView = @TypeOf(a_view);
+    const BView = @TypeOf(b_view);
 
     const dtype = Output.dtype;
-    if (std.mem.eql(isize, &a_view.strides, &b_view.strides) and
-        std.mem.eql(isize, &a_view.strides, &output.strides))
+    if (comptime hasStaticGeometry(AView) and
+        hasStaticGeometry(BView) and
+        hasStaticGeometry(Output))
     {
-        if (a_view.denseSlice()) |a_storage| {
-            if (b_view.denseSlice()) |b_storage| {
-                if (output.denseSlice()) |output_storage| {
-                    applyBinaryDense(a_storage, b_storage, output_storage, dtype, Operator);
-                    return;
+        if (comptime std.mem.eql(isize, &AView.static_strides, &BView.static_strides) and
+            std.mem.eql(isize, &AView.static_strides, &Output.static_strides) and
+            AView.static_is_dense_positive and
+            BView.static_is_dense_positive and
+            Output.static_is_dense_positive)
+        {
+            applyBinaryDense(
+                a_view.denseSlice().?,
+                b_view.denseSlice().?,
+                output.denseSlice().?,
+                dtype,
+                Operator,
+            );
+            return;
+        }
+    } else {
+        if (std.mem.eql(isize, &a_view.strides, &b_view.strides) and
+            std.mem.eql(isize, &a_view.strides, &output.strides))
+        {
+            if (a_view.denseSlice()) |a_storage| {
+                if (b_view.denseSlice()) |b_storage| {
+                    if (output.denseSlice()) |output_storage| {
+                        applyBinaryDense(a_storage, b_storage, output_storage, dtype, Operator);
+                        return;
+                    }
                 }
             }
         }
@@ -135,13 +147,26 @@ fn binary(a: anytype, b: anytype, output: anytype, comptime Operator: type) void
 }
 
 fn hasSameLayout(input: anytype, output: anytype) bool {
+    const Input = @TypeOf(input);
+    const Output = @TypeOf(output);
+    if (comptime hasStaticGeometry(Input) and hasStaticGeometry(Output)) {
+        return comptime std.mem.eql(isize, &Input.static_strides, &Output.static_strides) and
+            Input.static_is_dense_positive;
+    }
     return std.mem.eql(isize, &input.strides, &output.strides) and
         input.denseSlice() != null;
 }
 
 fn isTrailingVectorBroadcast(view: anytype) bool {
-    comptime std.debug.assert(@TypeOf(view).rank == 2);
+    const View = @TypeOf(view);
+    if (comptime hasStaticGeometry(View)) {
+        return comptime View.static_strides[0] == 0 and View.static_strides[1] == 1;
+    }
     return view.strides[0] == 0 and view.strides[1] == 1;
+}
+
+fn hasStaticGeometry(comptime View: type) bool {
+    return @hasDecl(View, "geometry_is_static") and View.geometry_is_static;
 }
 
 /// Apply a trailing vector across a dense [batch, width] tensor whose first
@@ -229,12 +254,6 @@ pub fn relu(input: anytype, output: anytype) void {
 }
 
 pub fn exp(input: anytype, output: anytype) void {
-    comptime {
-        if (@TypeOf(input).dtype.kind() != .float) {
-            @compileError("exp supports only floating-point tensors");
-        }
-    }
-
     unary(input, output, struct {
         fn scalar(comptime dtype: Dtype, value: dtype.Scalar()) dtype.Scalar() {
             return @exp(value);
