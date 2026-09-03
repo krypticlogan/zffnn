@@ -71,6 +71,36 @@ test "definition is counted and lowered without replaying model code" {
     try expect(graph.tensors[0].?.storage_tensor == 0);
     try expect(graph.tensors[2].?.storage_tensor == 2);
     try expect(graph.nodes[0].?.kind == .compute);
+    try std.testing.expectEqual(
+        zgc.Matmul.Strategy.contracted_axis,
+        graph.nodes[0].?.op.compute.matmul.strategy,
+    );
+}
+
+test "lowering selects and propagates a batch-contiguous dense layout" {
+    const batch = std.simd.suggestVectorLength(f32) orelse return error.SkipZigTest;
+    const definition = comptime blk: {
+        var builder = Definition.init();
+        const input = builder.input(.lhs, .f32, &.{ batch, 4 });
+        const weights = builder.parameter(.rhs, .f32, &.{ 4, 3 });
+        const bias = builder.parameter(.rank_four, .f32, &.{3});
+        const product = builder.matmul(input, weights);
+        const biased = builder.add(product, bias);
+        builder.output(builder.relu(biased));
+        break :blk builder.finish();
+    };
+    const graph = definition.model().build_graph;
+    const expected = [2]isize{ 1, batch };
+
+    try std.testing.expectEqual(expected, graph.tensors[0].?.layout.strides);
+    try std.testing.expectEqual([2]isize{ 1, 4 }, graph.tensors[1].?.layout.strides);
+    try std.testing.expectEqual(expected, graph.tensors[3].?.layout.strides);
+    try std.testing.expectEqual(expected, graph.tensors[4].?.layout.strides);
+    try std.testing.expectEqual(expected, graph.tensors[5].?.layout.strides);
+    try std.testing.expectEqual(
+        zgc.Matmul.Strategy.output_rows,
+        graph.nodes[0].?.op.compute.matmul.strategy,
+    );
 }
 
 test "counting pass shrinks the user-provided maximum rank" {

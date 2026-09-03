@@ -1,5 +1,6 @@
 const std = @import("std");
 const accumulation = @import("accumulation.zig");
+const Matmul = @import("../matmul.zig");
 
 /// Multiply two rank-2 tensors. SIMD traversal is selected from the participating
 /// axis strides; scalar logical indexing remains the universal fallback.
@@ -8,6 +9,17 @@ const accumulation = @import("accumulation.zig");
 /// rhs:    [K, N]
 /// output: [M, N]
 pub fn matmul(lhs: anytype, rhs: anytype, output: anytype) void {
+    matmulWithPlan(.automatic, lhs, rhs, output);
+}
+
+/// Execute one compile-time-selected traversal. Generated models never use
+/// `automatic`; it exists for direct operation calls with runtime views.
+pub fn matmulWithPlan(
+    comptime strategy: Matmul.Strategy,
+    lhs: anytype,
+    rhs: anytype,
+    output: anytype,
+) void {
     const Lhs = @TypeOf(lhs);
     const Rhs = @TypeOf(rhs);
     const Output = @TypeOf(output);
@@ -34,7 +46,17 @@ pub fn matmul(lhs: anytype, rhs: anytype, output: anytype) void {
     std.debug.assert(output.shape[0] == m);
     std.debug.assert(output.shape[1] == n);
 
-    switch (selectStrategy(lhs, rhs, output)) {
+    if (comptime strategy == .automatic) {
+        return switch (selectStrategy(lhs, rhs, output)) {
+            .automatic => unreachable,
+            .output_columns => matmulOutputColumns(lhs, rhs, output, m, k_len, n),
+            .contracted_axis => matmulContractedAxis(lhs, rhs, output, m, k_len, n),
+            .output_rows => matmulOutputRows(lhs, rhs, output, m, k_len, n),
+            .scalar => matmulScalar(lhs, rhs, output, m, k_len, n),
+        };
+    }
+    switch (comptime strategy) {
+        .automatic => unreachable,
         .output_columns => matmulOutputColumns(lhs, rhs, output, m, k_len, n),
         .contracted_axis => matmulContractedAxis(lhs, rhs, output, m, k_len, n),
         .output_rows => matmulOutputRows(lhs, rhs, output, m, k_len, n),
@@ -42,14 +64,7 @@ pub fn matmul(lhs: anytype, rhs: anytype, output: anytype) void {
     }
 }
 
-const Strategy = enum {
-    output_columns,
-    contracted_axis,
-    output_rows,
-    scalar,
-};
-
-fn selectStrategy(lhs: anytype, rhs: anytype, output: anytype) Strategy {
+fn selectStrategy(lhs: anytype, rhs: anytype, output: anytype) Matmul.Strategy {
     if (rhs.strides[1] == 1 and output.strides[1] == 1) {
         return .output_columns;
     }

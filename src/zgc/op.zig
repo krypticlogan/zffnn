@@ -1,5 +1,6 @@
 const std = @import("std");
 const Tensor = @import("tensor.zig");
+const Matmul = @import("matmul.zig");
 const kernels = @import("kernels.zig");
 const validation = @import("validation.zig");
 
@@ -16,12 +17,13 @@ pub const Op = union(enum) {
         exp,
         add,
         sub,
-        matmul,
+        matmul: MatmulAttrs,
         sum: SumAttrs,
         softmax: SoftmaxAttrs,
 
         pub const SumAttrs = struct { axis: i8 };
         pub const SoftmaxAttrs = struct { axis: i8 };
+        pub const MatmulAttrs = Matmul.Plan;
 
         pub fn execute(
             comptime op: Compute,

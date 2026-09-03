@@ -139,3 +139,26 @@ test "relu traverses a transposed input view" {
         &output_storage,
     );
 }
+
+test "relu preserves a dense first-axis-contiguous layout" {
+    var input_storage = [_]f32{ -1, 4, 2, -5, -3, 6 };
+    var output_storage: [6]f32 = @splat(std.math.nan(f32));
+
+    const input: zgc.Tensor.ConstView(f32, 2) = .{
+        .storage = &input_storage,
+        .shape = .{ 2, 3 },
+        .strides = .{ 1, 2 },
+        .offset = 0,
+    };
+    const output: zgc.Tensor.View(f32, 2) = .{
+        .storage = &output_storage,
+        .shape = .{ 2, 3 },
+        .strides = .{ 1, 2 },
+        .offset = 0,
+    };
+
+    const op: zgc.Op = .{ .compute = .relu };
+    op.execute(.{input}, output);
+
+    try std.testing.expectEqualSlices(f32, &.{ 0, 4, 2, 0, 0, 6 }, &output_storage);
+}

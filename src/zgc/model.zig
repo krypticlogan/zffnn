@@ -10,6 +10,59 @@ fn EmbeddedStorage(comptime bytes: []const u8, comptime alignment: usize) type {
     };
 }
 
+fn PackedEmbeddedStorage(
+    comptime bytes: []const u8,
+    comptime info: anytype,
+    comptime alignment: usize,
+) type {
+    const element_bytes = info.dtype.byteSize();
+    const element_count = info.shape.elementCount();
+    const contents = comptime blk: {
+        // Packing work scales with both the element count and rank because
+        // each logical index is decomposed into coordinates. Large embedded
+        // parameter tensors legitimately exceed Zig's default comptime quota.
+        @setEvalBranchQuota(element_count * (info.shape.rank + 8) + 1000);
+        var packed_bytes: [bytes.len]u8 = undefined;
+        for (0..element_count) |logical_index| {
+            var remaining = logical_index;
+            var physical_index = info.layout.offset;
+            var axis = info.shape.rank;
+            while (axis > 0) {
+                axis -= 1;
+                const extent = info.shape.at(axis);
+                const coordinate = remaining % extent;
+                remaining /= extent;
+                if (info.layout.strides[axis] < 0) {
+                    @compileError("embedded source packing does not support negative strides");
+                }
+                physical_index += coordinate *
+                    @as(usize, @intCast(info.layout.strides[axis]));
+            }
+
+            const source_start = logical_index * element_bytes;
+            const destination_start = physical_index * element_bytes;
+            @memcpy(
+                packed_bytes[destination_start..][0..element_bytes],
+                bytes[source_start..][0..element_bytes],
+            );
+        }
+        break :blk packed_bytes;
+    };
+
+    return struct {
+        const storage: [contents.len]u8 align(alignment) = contents;
+    };
+}
+
+fn hasLogicalRowMajorLayout(comptime info: anytype) bool {
+    const expected = @TypeOf(info.layout).contiguous(info.shape);
+    if (info.layout.offset != expected.offset) return false;
+    for (0..info.shape.rank) |axis| {
+        if (info.layout.strides[axis] != expected.strides[axis]) return false;
+    }
+    return true;
+}
+
 pub fn Model(
     comptime SourceKey: type,
     comptime capacities: Graph.Capacity,
@@ -54,8 +107,9 @@ pub fn Model(
             return model.constTensorView(tensor_id);
         }
 
-        /// Copy typed values into a model-owned source. This remains available
-        /// for owned parameters/constants as well as inputs.
+        /// Copy logical row-major values into a model-owned source. Lowering
+        /// may select another physical layout; this method performs the
+        /// corresponding one-time packing.
         pub fn copySource(
             model: *Self,
             comptime source_key: SourceKey,
@@ -69,7 +123,10 @@ pub fn Model(
             const bytes = std.mem.sliceAsBytes(values);
             const expected_bytes = comptime sourceByteCount(source_key);
             if (bytes.len != expected_bytes) return error.SourceSizeMismatch;
-            @memcpy(model.tensorBytes(source.tensor), bytes);
+            const destination = model.tensorView(source.tensor);
+            for (values, 0..) |value, logical_index| {
+                destination.storage[destination.elementOffsetFromLinear(logical_index)] = value;
+            }
         }
 
         /// Copy one runtime input into its model-owned region.
@@ -83,8 +140,9 @@ pub fn Model(
             try model.copySource(source_key, values);
         }
 
-        /// Borrow a typed runtime input slice without copying it. The caller
-        /// must keep the slice alive and unchanged for the duration of run().
+        /// Borrow runtime input storage without copying it. Values must use
+        /// the physical order returned by sourceLayout(). The caller must keep
+        /// the slice alive and unchanged for the duration of run().
         pub fn bindInput(
             model: *Self,
             comptime source_key: SourceKey,
@@ -110,6 +168,12 @@ pub fn Model(
                 @compileError("inputIsBound requires a runtime-bound input source");
             }
             return model.bound_sources[source_id] != null;
+        }
+
+        pub fn sourceLayout(
+            comptime source_key: SourceKey,
+        ) Tensor.Layout(capacities.max_rank) {
+            return sourceInfo(source_key).layout;
         }
 
         fn executeNode(model: *Self, comptime node_id: Graph.Node.Id) void {
@@ -202,8 +266,18 @@ pub fn Model(
                         @panic("runtime input has not been bound");
                     break :blk @alignCast(bytes);
                 },
-                .embedded => |bytes| blk: {
-                    const Embedded = EmbeddedStorage(bytes, @alignOf(T));
+                .embedded => |embedded| blk: {
+                    const Embedded = switch (embedded.order) {
+                        .logical => if (comptime hasLogicalRowMajorLayout(info))
+                            EmbeddedStorage(embedded.bytes, @alignOf(T))
+                        else
+                            PackedEmbeddedStorage(
+                                embedded.bytes,
+                                info,
+                                @alignOf(T),
+                            ),
+                        .physical => EmbeddedStorage(embedded.bytes, @alignOf(T)),
+                    };
                     break :blk &Embedded.storage;
                 },
             };

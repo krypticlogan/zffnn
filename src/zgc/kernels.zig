@@ -13,7 +13,12 @@ pub fn execute(comptime op: Op.Compute, inputs: anytype, output: anytype) void {
         .exp => elementwise.exp(inputs[0], output),
         .add => elementwise.add(inputs[0], inputs[1], output),
         .sub => elementwise.sub(inputs[0], inputs[1], output),
-        .matmul => contraction.matmul(inputs[0], inputs[1], output),
+        .matmul => |plan| contraction.matmulWithPlan(
+            plan.strategy,
+            inputs[0],
+            inputs[1],
+            output,
+        ),
         .sum => |attrs| reduction.sum(inputs[0], output, attrs.axis),
         .softmax => |attrs| special.softmax(inputs[0], output, attrs.axis),
     }

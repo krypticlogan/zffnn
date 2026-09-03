@@ -19,21 +19,12 @@ fn unary(input: anytype, output: anytype, comptime Operator: type) void {
     std.debug.assert(std.mem.eql(usize, &input.shape, &output.shape));
 
     const dtype = Input.dtype;
-    if (input.contiguousSlice()) |input_storage| {
-        if (output.contiguousSlice()) |output_storage| {
-            std.debug.assert(input_storage.len == output_storage.len);
-            const vector_len = std.simd.suggestVectorLength(Input.scalar_type) orelse 1;
-            const Vector = dtype.Vector(vector_len);
-
-            var index: usize = 0;
-            while (index + vector_len <= input_storage.len) : (index += vector_len) {
-                const values: Vector = input_storage[index..][0..vector_len].*;
-                output_storage[index..][0..vector_len].* = Operator.vector(dtype, vector_len, values);
+    if (std.mem.eql(isize, &input.strides, &output.strides)) {
+        if (input.denseSlice()) |input_storage| {
+            if (output.denseSlice()) |output_storage| {
+                applyUnaryDense(input_storage, output_storage, dtype, Operator);
+                return;
             }
-            while (index < input_storage.len) : (index += 1) {
-                output_storage[index] = Operator.scalar(dtype, input_storage[index]);
-            }
-            return;
         }
     }
 
@@ -44,6 +35,26 @@ fn unary(input: anytype, output: anytype, comptime Operator: type) void {
             dtype,
             input.storage[input_index],
         );
+    }
+}
+
+fn applyUnaryDense(
+    input_storage: anytype,
+    output_storage: anytype,
+    comptime dtype: Dtype,
+    comptime Operator: type,
+) void {
+    std.debug.assert(input_storage.len == output_storage.len);
+    const vector_len = std.simd.suggestVectorLength(dtype.Scalar()) orelse 1;
+    const Vector = dtype.Vector(vector_len);
+
+    var index: usize = 0;
+    while (index + vector_len <= input_storage.len) : (index += vector_len) {
+        const values: Vector = input_storage[index..][0..vector_len].*;
+        output_storage[index..][0..vector_len].* = Operator.vector(dtype, vector_len, values);
+    }
+    while (index < input_storage.len) : (index += 1) {
+        output_storage[index] = Operator.scalar(dtype, input_storage[index]);
     }
 }
 
@@ -67,6 +78,30 @@ fn binary(a: anytype, b: anytype, output: anytype, comptime Operator: type) void
     const b_view = b.broadcastTo(Output.rank, output.shape);
 
     const dtype = Output.dtype;
+    if (std.mem.eql(isize, &a_view.strides, &b_view.strides) and
+        std.mem.eql(isize, &a_view.strides, &output.strides))
+    {
+        if (a_view.denseSlice()) |a_storage| {
+            if (b_view.denseSlice()) |b_storage| {
+                if (output.denseSlice()) |output_storage| {
+                    applyBinaryDense(a_storage, b_storage, output_storage, dtype, Operator);
+                    return;
+                }
+            }
+        }
+    }
+
+    if (comptime Output.rank == 2) {
+        if (hasSameLayout(a_view, output) and isTrailingVectorBroadcast(b_view) and output.denseSlice() != null) {
+            applyFirstAxisBroadcast(a_view, b_view, output, dtype, Operator, true);
+            return;
+        }
+        if (isTrailingVectorBroadcast(a_view) and hasSameLayout(b_view, output) and output.denseSlice() != null) {
+            applyFirstAxisBroadcast(b_view, a_view, output, dtype, Operator, false);
+            return;
+        }
+    }
+
     if (a_view.contiguousSlice()) |a_storage| {
         if (b_view.contiguousSlice()) |b_storage| {
             if (output.contiguousSlice()) |output_storage| {
@@ -96,6 +131,84 @@ fn binary(a: anytype, b: anytype, output: anytype, comptime Operator: type) void
             a_view.storage[a_index],
             b_view.storage[b_index],
         );
+    }
+}
+
+fn hasSameLayout(input: anytype, output: anytype) bool {
+    return std.mem.eql(isize, &input.strides, &output.strides) and
+        input.denseSlice() != null;
+}
+
+fn isTrailingVectorBroadcast(view: anytype) bool {
+    comptime std.debug.assert(@TypeOf(view).rank == 2);
+    return view.strides[0] == 0 and view.strides[1] == 1;
+}
+
+/// Apply a trailing vector across a dense [batch, width] tensor whose first
+/// axis is contiguous. SIMD lanes traverse independent batch rows while the
+/// broadcast value is splatted once per output column.
+fn applyFirstAxisBroadcast(
+    dense: anytype,
+    broadcast: anytype,
+    output: anytype,
+    comptime dtype: Dtype,
+    comptime Operator: type,
+    comptime dense_is_a: bool,
+) void {
+    const vector_len = std.simd.suggestVectorLength(dtype.Scalar()) orelse 1;
+    const Vector = dtype.Vector(vector_len);
+    const batch = output.shape[0];
+    const width = output.shape[1];
+
+    for (0..width) |column| {
+        const broadcast_vector: Vector = @splat(broadcast.get(.{ 0, column }));
+        var row: usize = 0;
+        while (row + vector_len <= batch) : (row += vector_len) {
+            const dense_offset = dense.elementOffset(.{ row, column });
+            const output_offset = output.elementOffset(.{ row, column });
+            const dense_values: Vector = dense.storage[dense_offset..][0..vector_len].*;
+            output.storage[output_offset..][0..vector_len].* = if (dense_is_a)
+                Operator.vector(dtype, vector_len, dense_values, broadcast_vector)
+            else
+                Operator.vector(dtype, vector_len, broadcast_vector, dense_values);
+        }
+        while (row < batch) : (row += 1) {
+            const dense_value = dense.get(.{ row, column });
+            const broadcast_value = broadcast.get(.{ 0, column });
+            output.set(
+                .{ row, column },
+                if (dense_is_a)
+                    Operator.scalar(dtype, dense_value, broadcast_value)
+                else
+                    Operator.scalar(dtype, broadcast_value, dense_value),
+            );
+        }
+    }
+}
+
+fn applyBinaryDense(
+    a_storage: anytype,
+    b_storage: anytype,
+    output_storage: anytype,
+    comptime dtype: Dtype,
+    comptime Operator: type,
+) void {
+    const vector_len = std.simd.suggestVectorLength(dtype.Scalar()) orelse 1;
+    const Vector = dtype.Vector(vector_len);
+
+    var index: usize = 0;
+    while (index + vector_len <= a_storage.len) : (index += vector_len) {
+        const a_values: Vector = a_storage[index..][0..vector_len].*;
+        const b_values: Vector = b_storage[index..][0..vector_len].*;
+        output_storage[index..][0..vector_len].* = Operator.vector(
+            dtype,
+            vector_len,
+            a_values,
+            b_values,
+        );
+    }
+    while (index < a_storage.len) : (index += 1) {
+        output_storage[index] = Operator.scalar(dtype, a_storage[index], b_storage[index]);
     }
 }
 

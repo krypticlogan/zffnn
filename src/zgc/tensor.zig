@@ -3,18 +3,6 @@ const Dtype = @import("dtype.zig").Dtype;
 
 pub const Id = usize;
 pub const Shape_T = []const usize;
-pub fn Tensor(comptime dtype: Dtype, comptime tensor_shape: Shape_T) type {
-    const T = dtype.Scalar();
-    const len = Shape(tensor_shape.len).init(tensor_shape).elementCount();
-
-    return struct {
-        pub const shape = tensor_shape;
-        pub const scalar_type = T;
-        pub const element_count = len;
-
-        storage: [len]T,
-    };
-}
 
 /// View into memory for a given tensor.
 pub fn View(comptime T: type, comptime tensor_rank: usize) type {
@@ -104,6 +92,14 @@ pub fn View(comptime T: type, comptime tensor_rank: usize) type {
 
         pub fn contiguousSlice(self: *const Self) ?[]T {
             if (!self.isContiguous()) return null;
+            return self.storage[self.offset..][0..self.len()];
+        }
+
+        /// Return the physical storage span for any dense positive-stride
+        /// layout, including axis permutations such as strides [1, M]. The
+        /// slice is in physical rather than logical row-major order.
+        pub fn denseSlice(self: *const Self) ?[]T {
+            if (!isDensePositive(self)) return null;
             return self.storage[self.offset..][0..self.len()];
         }
 
@@ -240,6 +236,12 @@ pub fn ConstView(comptime T: type, comptime tensor_rank: usize) type {
             return self.storage[self.offset..][0..self.len()];
         }
 
+        /// Read-only counterpart to `View.denseSlice`.
+        pub fn denseSlice(self: *const Self) ?[]const T {
+            if (!isDensePositive(self)) return null;
+            return self.storage[self.offset..][0..self.len()];
+        }
+
         /// Read-only counterpart to `View.axisSlice`.
         pub fn axisSlice(
             self: *const Self,
@@ -286,6 +288,32 @@ pub fn ConstView(comptime T: type, comptime tensor_rank: usize) type {
             return result;
         }
     };
+}
+
+fn isDensePositive(view: anytype) bool {
+    const rank = @TypeOf(view.*).rank;
+    var visited: [rank]bool = @splat(false);
+    var expected_stride: isize = 1;
+    var remaining_axes: usize = 0;
+
+    for (view.shape) |extent| {
+        if (extent > 1) remaining_axes += 1;
+    }
+
+    while (remaining_axes > 0) {
+        var matched = false;
+        for (view.shape, view.strides, 0..) |extent, stride, axis| {
+            if (extent <= 1 or visited[axis] or stride != expected_stride) continue;
+            visited[axis] = true;
+            expected_stride *= @intCast(extent);
+            remaining_axes -= 1;
+            matched = true;
+            break;
+        }
+        if (!matched) return false;
+    }
+
+    return view.offset + view.len() <= view.storage.len;
 }
 
 fn axisSliceOffset(view: anytype, axis: usize, slice_index: usize) usize {
@@ -338,6 +366,22 @@ pub fn Layout(comptime max_rank: usize) type {
                 stride *= @intCast(shape.at(axis));
             }
 
+            return result;
+        }
+
+        /// Dense rank-2 storage with the first logical axis contiguous. This
+        /// layout is useful when the leading axis represents independent work
+        /// such as a batch: [M, N] uses strides [1, M].
+        pub fn firstAxisContiguous(shape: Shape(max_rank)) This {
+            if (shape.rank != 2) {
+                @compileError("first-axis-contiguous layout requires rank 2");
+            }
+            var result: This = .{
+                .offset = 0,
+                .strides = @splat(0),
+            };
+            result.strides[0] = 1;
+            result.strides[1] = @intCast(shape.at(0));
             return result;
         }
     };

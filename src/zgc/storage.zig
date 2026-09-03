@@ -1,6 +1,5 @@
 const std = @import("std");
 const Graph = @import("graph.zig");
-const Dtype = @import("dtype.zig").Dtype;
 
 pub const StorageRegion = struct {
     offset: usize,

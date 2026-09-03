@@ -7,15 +7,35 @@ pub const Binding = union(enum) {
     owned,
     /// Borrow storage supplied to a model instance at runtime.
     bound,
-    /// Read immutable bytes directly from the executable's read-only data.
-    embedded: []const u8,
+    /// Read immutable bytes from the executable's read-only data. Logical
+    /// bytes are packed into the layout selected during lowering; physical
+    /// bytes already satisfy that layout contract.
+    embedded: Embedded,
+};
+
+pub const Embedded = struct {
+    bytes: []const u8,
+    order: Order,
+
+    pub const Order = enum {
+        logical,
+        physical,
+    };
 };
 
 pub const owned: Binding = .owned;
 pub const bound: Binding = .bound;
 
+/// Embed values in logical row-major order. If lowering selects a different
+/// physical layout, the compiler packs these bytes into that layout.
 pub fn embed(comptime bytes: []const u8) Binding {
-    return .{ .embedded = bytes };
+    return .{ .embedded = .{ .bytes = bytes, .order = .logical } };
+}
+
+/// Embed values which are already stored in the physical order reported by
+/// the compiled model's source layout.
+pub fn embedPacked(comptime bytes: []const u8) Binding {
+    return .{ .embedded = .{ .bytes = bytes, .order = .physical } };
 }
 
 /// Normalize a named source configuration into the graph's enum-indexed source
@@ -54,14 +74,14 @@ pub fn Plan(
                     @compileError("only input sources may use runtime-bound storage");
                 }
             },
-            .embedded => |bytes| {
+            .embedded => |embedded| {
                 if (source.kind != .parameter and source.kind != .constant) {
                     @compileError("only parameter and constant sources may be embedded");
                 }
-                if (bytes.len != expected_bytes) {
+                if (embedded.bytes.len != expected_bytes) {
                     @compileError(std.fmt.comptimePrint(
                         "embedded source '{s}' requires {d} bytes, received {d}",
-                        .{ field.name, expected_bytes, bytes.len },
+                        .{ field.name, expected_bytes, embedded.bytes.len },
                     ));
                 }
             },
@@ -81,7 +101,10 @@ pub fn Plan(
         }
 
         pub fn isOwned(comptime tensor_info: anytype) bool {
-            return bindingForTensor(tensor_info) == .owned;
+            return switch (bindingForTensor(tensor_info)) {
+                .owned => true,
+                .bound, .embedded => false,
+            };
         }
     };
 }

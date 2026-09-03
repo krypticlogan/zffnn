@@ -102,6 +102,19 @@ test "logical linear offsets support negative strides" {
     try std.testing.expectEqual(@as(usize, 3), reversed_columns.elementOffsetFromLinear(5));
 }
 
+test "dense slices expose a physically contiguous axis permutation" {
+    var storage = [_]i32{ 1, 4, 2, 5, 3, 6 };
+    const view: zgc.Tensor.View(i32, 2) = .{
+        .storage = &storage,
+        .shape = .{ 2, 3 },
+        .strides = .{ 1, 2 },
+        .offset = 0,
+    };
+
+    try std.testing.expect(view.contiguousSlice() == null);
+    try std.testing.expectEqualSlices(i32, &storage, view.denseSlice().?);
+}
+
 test "axis slices preserve storage, offsets, and selected strides" {
     var storage = [_]i32{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 };
     var view: zgc.Tensor.View(i32, 3) = .{

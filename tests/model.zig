@@ -266,3 +266,144 @@ test "typed input loading rejects an incorrect element count" {
         model.copyInput(.input, &too_short),
     );
 }
+
+test "copied inputs are packed for a lowered batch-contiguous matmul" {
+    const Keys = enum(usize) { input, weights };
+    const BatchDefinition = zgc.DefinitionBackend(Keys, .{
+        .max_rank = 2,
+        .max_nodes = 1,
+        .max_tensors = 3,
+        .max_input_refs = 2,
+        .max_outputs = 1,
+    });
+    const batch = std.simd.suggestVectorLength(f32) orelse return error.SkipZigTest;
+    const definition = comptime blk: {
+        var builder = BatchDefinition.init();
+        const input = builder.input(.input, .f32, &.{ batch, 3 });
+        const weights = builder.parameter(.weights, .f32, &.{ 3, 2 });
+        builder.output(builder.matmul(input, weights));
+        break :blk builder.finish();
+    };
+    const BatchModel = definition.model();
+    var model = BatchModel.init();
+    var input_values: [batch * 3]f32 = undefined;
+    for (0..batch) |row| {
+        input_values[row * 3 ..][0..3].* = .{
+            @floatFromInt(row + 1),
+            2,
+            -1,
+        };
+    }
+    const weights = [_]f32{
+        1, 2,
+        3, 4,
+        5, 6,
+    };
+
+    try model.copyInput(.input, &input_values);
+    try model.copySource(.weights, &weights);
+    model.run();
+
+    try std.testing.expectEqual([2]isize{ 1, batch }, BatchModel.sourceLayout(.input).strides[0..2].*);
+    try std.testing.expectEqual([2]isize{ 1, 3 }, BatchModel.sourceLayout(.weights).strides[0..2].*);
+    const output = model.outputView(0);
+    for (0..batch) |row| {
+        const first: f32 = @floatFromInt(row + 2);
+        const second: f32 = @floatFromInt(2 * row + 4);
+        try std.testing.expectApproxEqAbs(first, output.get(.{ row, 0 }), 1e-6);
+        try std.testing.expectApproxEqAbs(second, output.get(.{ row, 1 }), 1e-6);
+    }
+}
+
+test "logical embedded weights are packed for lowered matmul storage" {
+    const Keys = enum(usize) { input, weights };
+    const MatmulDefinition = zgc.DefinitionBackend(Keys, .{
+        .max_rank = 2,
+        .max_nodes = 1,
+        .max_tensors = 3,
+        .max_input_refs = 2,
+        .max_outputs = 1,
+    });
+    const logical_weights = [_]f32{
+        1, 2,
+        3, 4,
+        5, 6,
+    };
+    const definition = comptime blk: {
+        var builder = MatmulDefinition.init();
+        const input = builder.input(.input, .f32, &.{ 1, 3 });
+        const weights = builder.parameter(.weights, .f32, &.{ 3, 2 });
+        builder.output(builder.matmul(input, weights));
+        break :blk builder.finish();
+    };
+    const EmbeddedMatmul = definition.modelWith(.{
+        .weights = zgc.Source.embed(std.mem.asBytes(&logical_weights)),
+    });
+    var model = EmbeddedMatmul.init();
+    try model.copyInput(.input, &[_]f32{ 2, -1, 3 });
+    model.run();
+
+    try std.testing.expectEqual([2]isize{ 1, 3 }, EmbeddedMatmul.sourceLayout(.weights).strides[0..2].*);
+    try std.testing.expectEqualSlices(f32, &.{ 14, 18 }, model.outputView(0).storage);
+}
+
+test "physically packed embedded weights can be consumed without repacking" {
+    const Keys = enum(usize) { input, weights };
+    const MatmulDefinition = zgc.DefinitionBackend(Keys, .{
+        .max_rank = 2,
+        .max_nodes = 1,
+        .max_tensors = 3,
+        .max_input_refs = 2,
+        .max_outputs = 1,
+    });
+    const packed_weights = [_]f32{
+        1, 3, 5,
+        2, 4, 6,
+    };
+    const definition = comptime blk: {
+        var builder = MatmulDefinition.init();
+        const input = builder.input(.input, .f32, &.{ 1, 3 });
+        const weights = builder.parameter(.weights, .f32, &.{ 3, 2 });
+        builder.output(builder.matmul(input, weights));
+        break :blk builder.finish();
+    };
+    const EmbeddedMatmul = definition.modelWith(.{
+        .weights = zgc.Source.embedPacked(std.mem.asBytes(&packed_weights)),
+    });
+    var model = EmbeddedMatmul.init();
+    try model.copyInput(.input, &[_]f32{ 2, -1, 3 });
+    model.run();
+
+    try std.testing.expectEqualSlices(f32, &.{ 14, 18 }, model.outputView(0).storage);
+}
+
+test "large logical embeddings receive sufficient compile-time packing quota" {
+    const Keys = enum(usize) { input, weights };
+    const MatmulDefinition = zgc.DefinitionBackend(Keys, .{
+        .max_rank = 2,
+        .max_nodes = 1,
+        .max_tensors = 3,
+        .max_input_refs = 2,
+        .max_outputs = 1,
+    });
+    const width = 32;
+    const logical_weights: [width * width]f32 = @splat(1);
+    const definition = comptime blk: {
+        var builder = MatmulDefinition.init();
+        const input = builder.input(.input, .f32, &.{ 1, width });
+        const weights = builder.parameter(.weights, .f32, &.{ width, width });
+        builder.output(builder.matmul(input, weights));
+        break :blk builder.finish();
+    };
+    const EmbeddedMatmul = definition.modelWith(.{
+        .weights = zgc.Source.embed(std.mem.asBytes(&logical_weights)),
+    });
+    var model = EmbeddedMatmul.init();
+    const input: [width]f32 = @splat(1);
+    try model.copyInput(.input, &input);
+    model.run();
+
+    for (model.outputView(0).storage) |value| {
+        try std.testing.expectEqual(@as(f32, width), value);
+    }
+}

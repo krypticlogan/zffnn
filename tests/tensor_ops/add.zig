@@ -208,6 +208,39 @@ test "add broadcasts a trailing vector across a matrix" {
     );
 }
 
+test "add broadcasts a trailing vector across a first-axis-contiguous matrix" {
+    var matrix_storage = [_]f32{ 1, 4, 2, 5, 3, 6 };
+    var bias_storage = [_]f32{ 10, 20, 30 };
+    var output_storage: [6]f32 = undefined;
+    const matrix: zgc.Tensor.ConstView(f32, 2) = .{
+        .storage = &matrix_storage,
+        .shape = .{ 2, 3 },
+        .strides = .{ 1, 2 },
+        .offset = 0,
+    };
+    const bias: zgc.Tensor.ConstView(f32, 1) = .{
+        .storage = &bias_storage,
+        .shape = .{3},
+        .strides = .{1},
+        .offset = 0,
+    };
+    const output: zgc.Tensor.View(f32, 2) = .{
+        .storage = &output_storage,
+        .shape = .{ 2, 3 },
+        .strides = .{ 1, 2 },
+        .offset = 0,
+    };
+
+    const op: zgc.Op = .{ .compute = .add };
+    op.execute(.{ matrix, bias }, output);
+
+    try std.testing.expectEqualSlices(
+        f32,
+        &.{ 11, 14, 22, 25, 33, 36 },
+        &output_storage,
+    );
+}
+
 test "add broadcasts singleton axes from both operands" {
     var lhs_storage = [_]i8{ 1, 2 };
     var rhs_storage = [_]i8{ 10, 20, 30 };

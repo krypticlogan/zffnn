@@ -121,7 +121,7 @@ pub fn DefinitionBackend(comptime SourceKey: type, comptime limits: Limits) type
         }
 
         pub fn matmul(self: *Self, comptime lhs: ValueType, comptime rhs: ValueType) ValueType {
-            return self.addCompute(.matmul, &.{ lhs, rhs });
+            return self.addCompute(.{ .matmul = .{} }, &.{ lhs, rhs });
         }
 
         pub fn sum(self: *Self, comptime tensor: ValueType, comptime axis: i8) ValueType {

@@ -278,7 +278,10 @@ fn writeOp(writer: *Writer, op: Op) Writer.Error!void {
             .exp => try writer.writeAll("exp"),
             .add => try writer.writeAll("add"),
             .sub => try writer.writeAll("sub"),
-            .matmul => try writer.writeAll("matmul"),
+            .matmul => |plan| try writer.print(
+                "matmul({s})",
+                .{@tagName(plan.strategy)},
+            ),
             .sum => |attrs| try writer.print("sum(axis={d})", .{attrs.axis}),
             .softmax => |attrs| try writer.print("softmax(axis={d})", .{attrs.axis}),
         },
