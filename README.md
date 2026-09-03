@@ -11,10 +11,11 @@ The project targets Zig 0.16.0.
 ## Capabilities
 
 - Typed, front-facing `DefinitionBackend` with enum-indexed sources.
-- Automatic counting and graph-lowering passes through `definition.model()`.
+- Counting, graph-lowering, and validation passes through `definition.model()`.
 - Exact graph capacities derived from user-configurable definition bounds.
 - Inline aligned model memory with no heap allocation during execution.
-- Contiguous, offset, broadcast, transposed, and generally strided tensor views.
+- Static-geometry model views and dynamic low-level views for contiguous,
+  offset, broadcast, transposed, and generally strided layouts.
 - Multiple graph inputs, parameters, constants, and outputs.
 - `f32`, `f16`, and `i8` tensor metadata and elementwise kernels where valid.
 - ReLU, exp, add, sub, matmul, sum, softmax, and transpose operations.
@@ -146,7 +147,7 @@ and recorded results.
 
 | Path | Purpose |
 | --- | --- |
-| `src/zgc/backends/` | Definition, exact counting, graph lowering, and pipeline orchestration |
+| `src/zgc/backends/` | Definition, exact counting, graph lowering, validation, and pipeline orchestration |
 | `src/zgc/kernels/` | Elementwise, reduction, contraction, layout, and special kernels |
 | `src/zgc/` | Graph, tensor/view, operation, storage, and executable-model machinery |
 | `src/cli/` | Model-specific command-line entry points |

@@ -12,6 +12,8 @@ construction and execution flow.
   exact capacities used by graph lowering and memory planning.
 - Shape and operation compatibility errors are reported during compilation when
   their inputs are statically known.
+- The validation backend checks the lowered graph before executable model types
+  are instantiated.
 - The generated model type contains a fixed graph and memory plan; execution
   does not interpret or allocate graph nodes.
 
@@ -39,15 +41,16 @@ in the model's mutable memory plan.
   output storage.
 - Layout-changing graph operations such as transpose create aliases rather than
   copying tensor data.
-- Views preserve shape, offset, and stride metadata and continue to reference
-  the root tensor's storage.
+- Generated-model views carry shape, strides, base offset, element count, and
+  layout traits in their types. Their runtime state contains storage and any
+  cursor offset introduced by runtime-selected subviews.
+- Dynamic views retain runtime geometry for explicit low-level use.
 - Lowering may choose a first-axis-contiguous physical layout for eligible
   rank-2 matmuls and propagate it through compatible dense operations.
 - Matmul parameter and constant right-hand sides retain logical `[K, N]` shape
   while lowering may store them output-major with physical strides `[1, K]`.
 - Generated matmuls carry a compile-time traversal plan selected from concrete
-  graph layouts. Runtime layout dispatch is reserved for direct low-level
-  operation calls that use the `automatic` strategy.
+  graph layouts. Direct low-level calls must select a concrete strategy.
 - `run()` executes the fixed operation list sequentially. Runtime input values
   may change between runs without rebuilding the model type.
 

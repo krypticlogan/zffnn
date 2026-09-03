@@ -19,6 +19,10 @@ DefinitionBackend ──► completed definition
                  concrete graph and layouts
                             │
                             ▼
+                    ValidationBackend
+              checked graph and static views
+                            │
+                            ▼
                        MemoryPlan
                   aligned tensor regions
                             │
@@ -45,7 +49,7 @@ The definition records:
 - inferred dtype and shape metadata;
 - graph outputs.
 
-Shape and dtype validation occurs while operations are added. `finish()` returns
+Operation inputs are validated while operations are added. `finish()` returns
 the completed immutable definition value.
 
 Definition limits cover maximum rank, nodes, tensors, input
@@ -72,6 +76,12 @@ tensor and produce an aliasing layout with adjusted shape and strides.
 
 The concrete graph stores fixed arrays of nodes, tensor metadata, flattened
 input references, outputs, and sources. Node order is execution order.
+
+The validation backend checks the lowered graph's inferred output shapes and
+dtypes. It also verifies that each matmul traversal plan is compatible with its
+selected layouts. A validated program provides mutable and read-only tensor
+view types whose shape, strides, base offset, element count, and layout traits
+are compile-time properties.
 
 ## Memory planning and model generation
 
@@ -106,8 +116,8 @@ model layout metadata while leaving initialization, runtime source binding, and
 output handling to the application.
 
 View nodes do not execute kernels. Their result layouts are resolved during
-graph construction, and downstream compute kernels receive views into the
-aliased storage.
+graph construction, and downstream compute kernels receive static-geometry
+views into the aliased storage.
 
 `definition.modelWith(...)` selects non-default storage by source-enum tag.
 `zgc.Source.embed(bytes)` accepts logical row-major parameter or constant bytes
@@ -120,16 +130,23 @@ counts are checked before a source is accepted.
 
 ## Kernel dispatch
 
-Each compute node resolves typed input and output views and dispatches through
-`Op.Compute.execute`. Graph lowering selects physical layouts, while kernels
-traverse contiguous axes in target-native SIMD chunks with scalar tails.
+Each compute node resolves prevalidated static input and output view types and
+dispatches through `Op.Compute.execute`. Graph lowering selects physical
+layouts, while kernels traverse contiguous axes in target-native SIMD chunks
+with scalar tails. Runtime view state contains storage and any cursor offset
+introduced by runtime-selected subviews; fixed tensor geometry is carried by
+the type.
 
 Matmul lowering also records a concrete traversal strategy in the operation's
 compile-time plan. Generated models dispatch directly to that strategy and do
 not branch over layout metadata at runtime. Direct low-level operation calls
-retain an `automatic` strategy for views whose layouts are only known at
-runtime. The plan contains the traversal strategy and is the configuration
-boundary for strategy-specific kernels.
+must provide a concrete strategy. The plan contains the traversal strategy and
+is the configuration boundary for strategy-specific kernels.
+
+Shape, dtype, rank, axis, and lowered-plan compatibility checks belong to the
+definition and validation backends. Execution kernels assume those contracts.
+Dynamic `Tensor.View` and `Tensor.ConstView` types remain available when a
+low-level caller intentionally supplies runtime geometry.
 
 Kernels are grouped by family:
 

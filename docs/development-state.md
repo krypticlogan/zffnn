@@ -21,12 +21,15 @@ Zig 0.16.0. The API should still be expected to change.
   bounds.
 - Graph lowering preserves stable tensor IDs, source indices, operation order,
   multiple outputs, shapes, dtypes, and layouts.
+- Lowered graphs are validated before model types are instantiated. Validation
+  includes inferred output geometry, dtypes, and matmul plan/layout contracts.
 - Invalid ranks, shapes, axes, dtypes, input counts, and broadcasting are
   rejected at compile time where the relevant metadata is static.
 
 ### Tensors and layouts
 
-- Owned tensor metadata and mutable/read-only runtime views.
+- Static-geometry mutable/read-only views for generated models and
+  runtime-geometry views for explicit low-level use.
 - Rank-zero through bounded-rank shapes.
 - Contiguous layouts, offsets, arbitrary strides, negative strides, transpose
   aliases, axis slices, and broadcast views.
