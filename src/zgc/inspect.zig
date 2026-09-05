@@ -128,7 +128,6 @@ pub fn writeMemoryPlan(comptime Model: type, writer: *Writer) Writer.Error!void 
         .{ plan.byte_count, plan.alignment, plan.tensor_regions.len },
     );
 
-    var previous_end: usize = 0;
     for (plan.tensor_regions, 0..) |maybe_region, tensor_id| {
         const info = graph.tensors[tensor_id].?;
         const region = maybe_region orelse {
@@ -142,24 +141,20 @@ pub fn writeMemoryPlan(comptime Model: type, writer: *Writer) Writer.Error!void 
             continue;
         };
         const end = region.offset + region.len_bytes;
-        const owns_storage = info.storage_tensor == tensor_id;
-        const padding = if (owns_storage) region.offset - previous_end else 0;
         try writer.print(
-            "  t{d}: [{d}..{d}) bytes={d} align={d} padding={d} storage=t{d} dtype={s} shape=",
+            "  t{d}: [{d}..{d}) bytes={d} align={d} storage=t{d} dtype={s} shape=",
             .{
                 tensor_id,
                 region.offset,
                 end,
                 region.len_bytes,
                 region.alignment,
-                padding,
                 info.storage_tensor,
                 @tagName(info.dtype),
             },
         );
         try writeShape(writer, &info.shape);
         try writer.writeByte('\n');
-        if (owns_storage) previous_end = end;
     }
 }
 

@@ -23,16 +23,20 @@ DefinitionBackend ──► completed definition
               checked graph and static views
                             │
                             ▼
+                    LifetimeAnalysis
+                 storage-live intervals
+                            │
+                            ▼
                        MemoryPlan
-                  aligned tensor regions
+                reusable aligned regions
                             │
                             ▼
                      executable Model type
 ```
 
 Calling `definition.model()` performs every stage after definition. Counting
-and graph backends are internal implementation details and are not exported as
-public model-building APIs.
+and compiler-analysis backends are internal implementation details and are not
+exported as public model-building APIs.
 
 ## Definition
 
@@ -91,8 +95,12 @@ contains one inline byte array sized and aligned by that plan. Model-owned
 sources and compute results receive regions in this array; embedded parameters,
 embedded constants, and runtime-bound inputs remain external to it.
 
-The planner assigns distinct storage to independent compute results and does
-not reuse regions when tensor lifetimes do not overlap. Execution does not
+Lifetime analysis records a half-open node interval for each storage root and
+propagates alias uses to that root. Model-owned sources and output roots remain
+persistent. The planner releases expired intermediate regions, coalesces
+adjacent free spans, and places new tensors into the smallest aligned span that
+fits. Oversized spans are split around the allocation. If no span fits, the
+planner extends the model's storage high-water mark. Execution does not
 allocate.
 
 The model API provides:

@@ -59,8 +59,10 @@ in the model's mutable memory plan.
 - A model instance owns one inline, aligned mutable byte array.
 - The compile-time memory plan assigns regions to owned source and result
   tensors; aliases do not receive separate regions.
-- The planner assigns permanent regions and does not reuse storage based on
-  tensor lifetimes.
+- Model-owned sources and graph outputs retain persistent regions.
+- Intermediate regions may overlap when their validated half-open lifetimes do
+  not overlap. Free spans are alignment-aware, split when partially consumed,
+  and coalesced when adjacent.
 - Heap allocation is not required for model initialization or execution.
 
 See [architecture](architecture.md) for the compilation pipeline and

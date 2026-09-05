@@ -13,7 +13,8 @@ The project targets Zig 0.16.0.
 - Typed, front-facing `DefinitionBackend` with enum-indexed sources.
 - Counting, graph-lowering, and validation passes through `definition.model()`.
 - Exact graph capacities derived from user-configurable definition bounds.
-- Inline aligned model memory with no heap allocation during execution.
+- Lifetime-planned, reusable inline model memory with no heap allocation during
+  execution.
 - Static-geometry model views and dynamic low-level views for contiguous,
   offset, broadcast, transposed, and generally strided layouts.
 - Multiple graph inputs, parameters, constants, and outputs.

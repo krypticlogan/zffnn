@@ -31,8 +31,8 @@ views adapt them to the graph matmul convention of `[input, output]`; the views
 continue to alias the embedded bytes.
 
 Consequently, the six parameters (437,544 bytes total) and the input receive no
-memory-plan regions. The planner reserves 2,424 bytes for the network's nine
-intermediate/output tensors.
+memory-plan regions. Lifetime-based reuse reserves 1,024 bytes for the
+network's nine intermediate/output tensors.
 
 ## Model inspection
 

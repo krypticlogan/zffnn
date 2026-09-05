@@ -23,6 +23,8 @@ Zig 0.16.0. The API should still be expected to change.
   multiple outputs, shapes, dtypes, and layouts.
 - Lowered graphs are validated before model types are instantiated. Validation
   includes inferred output geometry, dtypes, and matmul plan/layout contracts.
+- Lifetime analysis consolidates alias uses onto storage roots and provides
+  half-open intervals to memory planning.
 - Invalid ranks, shapes, axes, dtypes, input counts, and broadcasting are
   rejected at compile time where the relevant metadata is static.
 
@@ -50,7 +52,8 @@ Zig 0.16.0. The API should still be expected to change.
 
 ### Model and storage
 
-- One inline, aligned memory allocation per model instance.
+- One inline, aligned memory allocation per model instance with lifetime-based
+  intermediate-region reuse.
 - Compile-time memory plan shared by runtime instances.
 - Typed logical source/input packing, borrowed runtime inputs, logical or
   prepacked embedded read-only parameters/constants, sequential graph
@@ -73,7 +76,6 @@ Zig 0.16.0. The API should still be expected to change.
 
 - Shapes and extents are currently compile-time fixed; bounded runtime extents
   are a design goal, not an implemented feature.
-- Memory planning does not yet perform lifetime analysis or reuse regions.
 - Runtime-bound inputs currently report a missing binding when their view is
   first resolved during execution rather than through a separate run preflight.
 - Layout selection is limited to packed matmul right-hand parameters, the

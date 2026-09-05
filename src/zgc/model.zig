@@ -67,10 +67,11 @@ pub fn Model(
     comptime SourceKey: type,
     comptime capacities: Graph.Capacity,
     comptime Validated: type,
+    comptime lifetimes: anytype,
     comptime SourcePlan: type,
 ) type {
     const graph = Validated.graph;
-    const plan = Storage.MemoryPlan(capacities, graph, SourcePlan);
+    const plan = Storage.MemoryPlan(capacities, graph, lifetimes, SourcePlan);
     return struct {
         const Self = @This();
         pub const SourceKeyType = SourceKey;
@@ -78,6 +79,7 @@ pub fn Model(
         pub const build_graph = graph;
         pub const memory_plan = plan;
         pub const internal_capacity = capacities;
+        pub const lifetime_analysis = lifetimes;
         pub const source_plan = SourcePlan;
 
         memory: [plan.byte_count]u8 align(plan.alignment) = undefined,

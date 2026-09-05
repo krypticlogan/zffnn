@@ -6,7 +6,7 @@ repository_root=$(dirname -- "$script_dir")
 
 cd "$repository_root"
 
-for batch in 1 2 4 8 16 32 64 128; do
+for batch in 1 8 32 128; do
     for model in small medium large; do
         printf '\n%s\n' "Running model=${model} batch=${batch}"
         zig build benchmark \
